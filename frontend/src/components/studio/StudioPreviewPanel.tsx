@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Monitor, Smartphone, RefreshCw, ExternalLink, Maximize2, Minimize2, Sparkles } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Monitor, Smartphone, RefreshCw, ExternalLink, Maximize2, Minimize2, Sparkles, Wifi, Battery, Signal } from 'lucide-react';
 import { AppPreview } from '../AppPreview';
 import type { GenerateResult } from '../../lib/api';
 
@@ -23,15 +23,58 @@ interface StudioPreviewPanelProps {
 
 type Viewport = 'desktop' | 'mobile';
 
-const VIEWPORT_SIZES: Record<Viewport, { width: string; height: string }> = {
-  desktop: { width: '100%', height: '100%' },
-  mobile: { width: '375px', height: '100%' },
-};
+// iPhone 15 logical dimensions
+const PHONE_SCREEN_W = 375;
+const PHONE_SCREEN_H = 812;
+const PHONE_BEZEL = 10;
+const PHONE_OUTER_W = PHONE_SCREEN_W + PHONE_BEZEL * 2; // 395
+const PHONE_OUTER_H = PHONE_SCREEN_H + PHONE_BEZEL * 2; // 832
 
 const VIEWPORT_LABELS: Record<Viewport, string> = {
-  desktop: '768 x 100%',
-  mobile: '375 x 100%',
+  desktop: 'Desktop',
+  mobile: `iPhone · ${PHONE_SCREEN_W}×${PHONE_SCREEN_H}`,
 };
+
+function PhoneStatusBar() {
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return (
+    <div
+      className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6"
+      style={{ height: 48, pointerEvents: 'none' }}
+    >
+      <span className="text-[13px] font-semibold text-black/80">{time}</span>
+      <div className="flex items-center gap-1">
+        <Signal className="w-[14px] h-[14px] text-black/70" />
+        <Wifi className="w-[14px] h-[14px] text-black/70" />
+        <Battery className="w-[18px] h-[18px] text-black/70" />
+      </div>
+    </div>
+  );
+}
+
+function PhoneDynamicIsland() {
+  return (
+    <div
+      className="absolute top-[10px] left-1/2 -translate-x-1/2 z-30 rounded-full bg-black"
+      style={{ width: 120, height: 34 }}
+    >
+      {/* Camera dot */}
+      <div
+        className="absolute top-1/2 -translate-y-1/2 rounded-full bg-gray-800 border border-gray-700"
+        style={{ width: 10, height: 10, right: 18 }}
+      />
+    </div>
+  );
+}
+
+function PhoneHomeIndicator() {
+  return (
+    <div className="absolute bottom-[6px] left-1/2 -translate-x-1/2 z-20" style={{ pointerEvents: 'none' }}>
+      <div className="rounded-full bg-black/20" style={{ width: 134, height: 5 }} />
+    </div>
+  );
+}
 
 export function StudioPreviewPanel({
   generatedApp,
@@ -44,6 +87,26 @@ export function StudioPreviewPanel({
   const [viewport, setViewport] = useState<Viewport>('desktop');
   const [refreshKey, setRefreshKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [phoneScale, setPhoneScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scale the phone to fit available space
+  const computeScale = useCallback(() => {
+    if (!containerRef.current || viewport !== 'mobile') return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const availH = rect.height - 32; // 16px padding top+bottom
+    const availW = rect.width - 32;
+    const scaleH = availH / PHONE_OUTER_H;
+    const scaleW = availW / PHONE_OUTER_W;
+    const s = Math.min(scaleH, scaleW, 1); // never scale up
+    setPhoneScale(Math.max(s, 0.4)); // minimum 40% scale
+  }, [viewport]);
+
+  useEffect(() => {
+    computeScale();
+    window.addEventListener('resize', computeScale);
+    return () => window.removeEventListener('resize', computeScale);
+  }, [computeScale]);
 
   const hasApp = !!generatedApp;
 
@@ -86,6 +149,8 @@ export function StudioPreviewPanel({
       </div>
     );
   }
+
+  const isMobile = viewport === 'mobile';
 
   return (
     <div className="flex flex-col h-full bg-gray-100">
@@ -146,29 +211,96 @@ export function StudioPreviewPanel({
         </div>
       </div>
 
-      {/* Preview */}
-      <div className="flex-1 overflow-auto p-4 flex justify-center">
-        <div
-          className="relative bg-white rounded-lg shadow-lg overflow-hidden transition-all duration-300"
-          style={{
-            width: VIEWPORT_SIZES[viewport].width,
-            height: VIEWPORT_SIZES[viewport].height,
-            minHeight: '500px',
-          }}
-        >
-          {/* Device notch (mobile only) */}
-          {viewport === 'mobile' && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-gray-800 rounded-b-xl z-10" />
-          )}
+      {/* Preview area */}
+      <div ref={containerRef} className="flex-1 overflow-hidden flex items-center justify-center p-4">
+        {isMobile ? (
+          /* ── iPhone device frame ── */
+          <div
+            style={{
+              transform: `scale(${phoneScale})`,
+              transformOrigin: 'center center',
+              width: PHONE_OUTER_W,
+              height: PHONE_OUTER_H,
+              flexShrink: 0,
+            }}
+          >
+            {/* Outer bezel */}
+            <div
+              className="relative bg-[#1a1a1a] shadow-2xl"
+              style={{
+                width: PHONE_OUTER_W,
+                height: PHONE_OUTER_H,
+                borderRadius: 48,
+                padding: PHONE_BEZEL,
+                boxShadow: '0 25px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08) inset',
+              }}
+            >
+              {/* Side buttons */}
+              <div
+                className="absolute bg-[#2a2a2a] rounded-r"
+                style={{ width: 3, height: 28, top: 120, left: -1 }}
+              />
+              <div
+                className="absolute bg-[#2a2a2a] rounded-r"
+                style={{ width: 3, height: 52, top: 170, left: -1 }}
+              />
+              <div
+                className="absolute bg-[#2a2a2a] rounded-r"
+                style={{ width: 3, height: 52, top: 230, left: -1 }}
+              />
+              <div
+                className="absolute bg-[#2a2a2a] rounded-l"
+                style={{ width: 3, height: 80, top: 180, right: -1 }}
+              />
 
-          <AppPreview
-            key={`${generatedApp.id}:${previewRefreshTick}:${refreshKey}`}
-            code={liveCode}
-            appId={generatedApp.id}
-            height="100%"
-            mobile={viewport === 'mobile'}
-          />
-        </div>
+              {/* Inner screen area */}
+              <div
+                className="relative overflow-hidden bg-white"
+                style={{
+                  width: PHONE_SCREEN_W,
+                  height: PHONE_SCREEN_H,
+                  borderRadius: 38,
+                }}
+              >
+                {/* Dynamic Island */}
+                <PhoneDynamicIsland />
+
+                {/* Status bar */}
+                <PhoneStatusBar />
+
+                {/* Home indicator */}
+                <PhoneHomeIndicator />
+
+                {/* App iframe */}
+                <AppPreview
+                  key={`${generatedApp.id}:${previewRefreshTick}:${refreshKey}`}
+                  code={liveCode}
+                  appId={generatedApp.id}
+                  height="100%"
+                  mobile={true}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── Desktop preview ── */
+          <div
+            className="relative bg-white rounded-lg shadow-lg overflow-hidden transition-all duration-300"
+            style={{
+              width: '100%',
+              height: '100%',
+              minHeight: '500px',
+            }}
+          >
+            <AppPreview
+              key={`${generatedApp.id}:${previewRefreshTick}:${refreshKey}`}
+              code={liveCode}
+              appId={generatedApp.id}
+              height="100%"
+              mobile={false}
+            />
+          </div>
+        )}
       </div>
 
       {/* Footer */}

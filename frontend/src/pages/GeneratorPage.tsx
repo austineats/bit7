@@ -386,9 +386,18 @@ export function GeneratorPage() {
   }
 
   function handleBack() {
-    // Only go back to landing if there's no active generation
+    // Go back to landing — full reset (same as New)
     if (!generating) {
+      setGeneratedApp(null);
+      setLiveCode(null);
+      setChatHistory([]);
+      setPrompt('');
+      setSuggestions([]);
+      setFullApp(null);
+      setActiveSection('overview');
+      planRef.current = null;
       setIsBuilderMode(false);
+      try { sessionStorage.removeItem(SS_KEY); } catch {}
     }
   }
 

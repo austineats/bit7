@@ -1,7 +1,6 @@
 import { prisma } from "./db.js";
 import { runGenerationPipeline } from "./pipeline.js";
 import { generateReactCode } from "./codeGenerator.js";
-import { gatherAppContext } from "./contextResearch.js";
 import type { GenerateResult } from "../types/index.js";
 import type { ProgressCallback } from "./progressEmitter.js";
 import { randomUUID } from "node:crypto";
@@ -15,23 +14,11 @@ export async function generateFromPrompt(
   // Opus is only used if explicitly requested — never auto-selected
   const resolvedModel = model === "opus" ? "opus" : "sonnet";
 
-  onProgress?.({ type: "status", message: "Researching your idea..." });
-
-  // Step 0: Context research — understand the domain, competitors, terminology
-  let contextBrief = null;
-  try {
-    contextBrief = await gatherAppContext(prompt);
-    if (contextBrief) {
-      console.log("Context research complete:", contextBrief.must_have_features?.length, "features identified");
-      onProgress?.({ type: "status", message: "Research complete — planning your app..." });
-    }
-  } catch (e) {
-    console.warn("Context research failed (non-fatal):", e);
-  }
+  onProgress?.({ type: "status", message: "Scaffolding project..." });
 
   // Step 1: Run reasoner pipeline (Haiku) to extract structured intent
   console.log("Starting reasoner pipeline...");
-  const { spec, intent } = await runGenerationPipeline(prompt, contextBrief);
+  const { spec, intent } = await runGenerationPipeline(prompt);
 
   // Emit narrative event — AI self-dialogue before the plan
   if (intent.narrative) {
@@ -50,13 +37,13 @@ export async function generateFromPrompt(
       app_name: intent.app_name_hint,
       domain: intent.domain,
       design: intent.design_philosophy,
-      tabs: (intent.nav_items ?? intent.nav_tabs ?? []).map((t: { label: string; icon: string }) => t.label),
+      tabs: intent.nav_tabs.map((t: { label: string; icon: string }) => t.label),
       features: intent.premium_features ?? [],
       feature_details: intent.feature_details ?? [],
     },
   });
 
-  onProgress?.({ type: "status", message: "Generating application code..." });
+  onProgress?.({ type: "status", message: "Compiling components..." });
 
   // Step 2: Generate real React code using the intent + context
   // onProgress is threaded through so code gen emits real-time "writing" events
@@ -70,34 +57,44 @@ export async function generateFromPrompt(
   let latest_pipeline_summary: string | undefined;
   let pipelineArtifact: unknown = null;
 
-  try {
-    const codeResult = await generateReactCode(intent, prompt, resolvedModel, onProgress, contextBrief);
-    if (codeResult) {
-      generated_code = codeResult.generated_code;
-      theme_color = codeResult.primary_color;
-      tagline_override = codeResult.tagline;
-      quality_score = codeResult.quality_score;
-      quality_breakdown = codeResult.quality_breakdown;
-      pipeline_run_id = codeResult.pipeline_artifact.run_id;
-      latest_pipeline_summary = `Selected ${codeResult.pipeline_artifact.selected_candidate} (${codeResult.quality_score}/100)`;
-      pipelineArtifact = codeResult.pipeline_artifact;
-
-      // Quality score tracked internally but not shown to user
-    } else {
-      console.warn("Code generation returned null — app will be spec-only");
-      onProgress?.({ type: "status", message: "Code generation did not produce output" });
+  // Attempt code generation with one retry on failure
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      if (attempt === 2) {
+        console.log("Retrying code generation (attempt 2/2)...");
+        onProgress?.({ type: "status", message: "Retrying code generation..." });
+      }
+      const codeResult = await generateReactCode(intent, prompt, resolvedModel, onProgress);
+      if (codeResult) {
+        generated_code = codeResult.generated_code;
+        theme_color = codeResult.primary_color;
+        tagline_override = codeResult.tagline;
+        quality_score = codeResult.quality_score;
+        quality_breakdown = codeResult.quality_breakdown;
+        pipeline_run_id = codeResult.pipeline_artifact.run_id;
+        latest_pipeline_summary = `Selected ${codeResult.pipeline_artifact.selected_candidate} (${codeResult.quality_score}/100)`;
+        pipelineArtifact = codeResult.pipeline_artifact;
+        break; // Success — exit retry loop
+      } else {
+        console.warn(`Code generation returned null (attempt ${attempt}/2)`);
+        if (attempt === 2) {
+          onProgress?.({ type: "status", message: "Code generation failed after retry" });
+        }
+      }
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`React code generation error (attempt ${attempt}/2):`, errMsg);
+      if (attempt === 2) {
+        onProgress?.({ type: "status", message: `Code generation error: ${errMsg.slice(0, 80)}` });
+      }
     }
-  } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e);
-    console.error("React code generation error (non-fatal):", errMsg);
-    onProgress?.({ type: "status", message: `Code generation error: ${errMsg.slice(0, 80)}` });
   }
 
   // Step 3: Delete all previous apps (MVP — only keep latest generation)
   await prisma.app.deleteMany();
 
   // Step 4: Store in DB
-  onProgress?.({ type: "status", message: "Saving your app..." });
+  onProgress?.({ type: "status", message: "Deploying to preview..." });
   const app = await prisma.app.create({
     data: {
       name: spec.name,
