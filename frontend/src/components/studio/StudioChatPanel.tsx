@@ -33,6 +33,7 @@ interface StudioChatPanelProps {
   workbenchMode: 'build' | 'visual_edit' | 'discuss';
   onWorkbenchModeChange: (mode: 'build' | 'visual_edit' | 'discuss') => void;
   isWorking: boolean;
+  progressPercent: number;
 }
 
 export function StudioChatPanel({
@@ -48,6 +49,7 @@ export function StudioChatPanel({
   workbenchMode,
   onWorkbenchModeChange,
   isWorking,
+  progressPercent,
 }: StudioChatPanelProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -95,6 +97,15 @@ export function StudioChatPanel({
 
         {chatHistory.map(msg => {
           const isUser = msg.role === 'user';
+
+          if (msg.type === 'building') {
+            return (
+              <div key={msg.id} className="flex items-start gap-2 px-2 py-0.5">
+                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                <span className="text-sm text-indigo-700">{msg.content}</span>
+              </div>
+            );
+          }
 
           if (msg.type === 'writing') {
             return (
@@ -188,7 +199,7 @@ export function StudioChatPanel({
                 <div className="flex-1">
                   <p className="text-sm text-indigo-900">{statusMessage}</p>
                   <div className="mt-2 h-1.5 bg-indigo-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-600 rounded-full transition-all duration-300 animate-pulse" style={{ width: '60%' }} />
+                    <div className="h-full bg-indigo-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${progressPercent}%` }} />
                   </div>
                 </div>
               </div>
@@ -276,12 +287,12 @@ export function StudioChatPanel({
             }
             rows={3}
             disabled={isWorking}
-            className="w-full min-h-[80px] px-4 py-3 pr-12 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 resize-none focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 transition-all"
+            className="w-full min-h-[92px] px-4 py-3.5 pr-14 pb-12 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 resize-none focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 transition-all"
           />
           <button
             type="submit"
             disabled={isWorking || !prompt.trim()}
-            className="absolute right-2 bottom-2 w-8 h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="absolute right-3 bottom-3 w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             {isWorking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>

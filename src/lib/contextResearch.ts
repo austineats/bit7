@@ -43,6 +43,35 @@ const contextBriefSchema = z.object({
   ui_component_suggestions: z.array(z.string()).max(10).optional().default([]),
   animation_style: z.string().optional().default("subtle, smooth transitions"),
   layout_blueprint: z.string().optional().default("centered content with top navigation"),
+  item_display_patterns: z.array(z.object({
+    content_type: z.string(),
+    recommended_display: z.string(),
+    card_structure: z.string(),
+  })).max(5).optional().default([]),
+  competitor_visuals: z.array(z.object({
+    name: z.string(),
+    colors: z.array(z.string()),
+    og_image: z.string().nullable(),
+    layout_signals: z.array(z.string()),
+    screenshot_analysis: z.object({
+      color_palette: z.array(z.string()),
+      layout_type: z.string(),
+      component_patterns: z.array(z.string()),
+      navigation_style: z.string(),
+      image_usage: z.string(),
+      interactive_elements: z.array(z.string()),
+      key_ui_to_replicate: z.array(z.string()),
+      // Granular CSS-level visual extraction fields
+      background_treatment: z.string().optional(),
+      card_design_spec: z.string().optional(),
+      typography_hierarchy: z.string().optional(),
+      spacing_pattern: z.string().optional(),
+      gradient_specs: z.array(z.string()).optional(),
+      border_and_shadow_system: z.string().optional(),
+      hero_section_spec: z.string().optional(),
+      section_patterns: z.array(z.string()).optional(),
+    }).nullable(),
+  })).optional().default([]),
 });
 
 export type AppContextBrief = z.infer<typeof contextBriefSchema>;
@@ -69,7 +98,26 @@ BAD: "smooth animations"
 
 For layout_blueprint, provide a specific spatial layout a developer can implement:
 GOOD: "Centered hero (max-w-2xl) with gradient header -> large textarea input -> prominent CTA -> results expand below with slide-up animation. Score ring left, breakdown cards right in 2-column grid. History as horizontal scrollable cards below."
-BAD: "clean layout with sections"`;
+BAD: "clean layout with sections"
+
+For item_display_patterns, identify every type of content item in this app and describe EXACTLY how competitors display it:
+GOOD: { content_type: "Pokemon cards", recommended_display: "Responsive card grid (grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4) with visual cards", card_structure: "Gradient image area (type-colored: Fire=orange, Water=blue, Grass=green) showing Pokemon silhouette at 60% height -> Bold name + type badge pill -> Stats bar row (HP, ATK, DEF) with tiny progress bars -> Rarity star indicator + market price" }
+BAD: { content_type: "items", recommended_display: "grid", card_structure: "shows item info" }
+
+CRITICAL RULE: If the app involves COLLECTIONS or LISTINGS of visual items (products, cards, recipes, art, portfolios, etc.), the layout_blueprint MUST recommend a multi-column card grid — NEVER a single-column stat banner layout or vertical list. Real marketplace and collection apps (eBay, Etsy, Pokemon TCG Online, MTG Arena, Dribbble, Pinterest) ALWAYS use multi-column card grids with visual thumbnails. Each card must have a visual/image area, not just text.
+
+VISUAL SIGNATURE SPECIFICITY (CRITICAL):
+For visual_signature in competitive_landscape, describe EXACT visual treatments, not vague impressions:
+GOOD: "Dark navy bg #0f172a with purple radial glow at hero, glass-morphism cards with border-white/10 and backdrop-blur, gradient CTAs purple-to-blue with glow shadows, Inter font 56px hero heading font-black tracking-tight"
+BAD: "Modern dark theme with nice UI"
+
+For design_references, be specific about EXACT CSS-level patterns:
+GOOD color_psychology: "Primary #7c3aed purple conveys innovation. Paired with #3b82f6 blue for trust in gradients. Dark bg #0a0e27 for premium feel. Text white/90 for headings, white/60 for body."
+GOOD layout_pattern: "Full-width stacked sections: sticky transparent nav -> centered hero py-24 max-w-4xl with gradient badge pill + 56px heading + dual CTAs -> 3-col feature grid py-20 with icon-box cards -> social proof logo strip -> pricing 3-tier cards -> footer"
+GOOD typography_style: "Inter. Hero: 56px/64px font-black tracking-[-0.02em]. Section heads: 36px font-bold tracking-tight. Card titles: 18px font-semibold. Body: 15px leading-relaxed text-gray-400."
+BAD: "clean modern sans-serif with good hierarchy"
+
+CRITICAL: visual_signature and design_references must contain enough CSS-level detail that a developer could replicate the competitor's visual style WITHOUT seeing a screenshot. Vague descriptions are useless.`;
 
 const toolInputSchema = {
   type: "object" as const,
@@ -86,7 +134,7 @@ const toolInputSchema = {
           name: { type: "string" },
           description: { type: "string" },
           key_ux_patterns: { type: "array", items: { type: "string" } },
-          visual_signature: { type: "string" },
+          visual_signature: { type: "string", description: "EXACT visual design specs as CSS: background treatment, card design, typography scale, gradient colors, shadow system. NOT vague like 'modern dark theme'. Example: 'Dark #0a0e27 bg with radial purple glow, glass cards border-white/8 rounded-2xl p-6, gradient CTAs purple-600 to blue-500 with glow shadow, Inter 56px font-black hero heading tracking-tight'" },
           pricing_model: { type: "string" },
         },
         required: ["name", "description", "key_ux_patterns", "visual_signature", "pricing_model"],
@@ -143,6 +191,22 @@ const toolInputSchema = {
       type: "string",
       description: "Spatial layout recommendation, e.g. 'Centered hero max-w-2xl -> textarea input -> CTA -> expanding results below (like Cal AI scan flow)' or 'Split panel: left form, right live preview with variant cards (like Jasper.ai)'",
     },
+    item_display_patterns: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          content_type: { type: "string", description: "What kind of items are displayed, e.g. 'Pokemon cards', 'recipe items', 'product listings'" },
+          recommended_display: { type: "string", description: "Specific grid/layout recommendation, e.g. '3-column visual card grid with gradient image area, responsive: grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'" },
+          card_structure: { type: "string", description: "Internal card layout, e.g. 'Gradient image area (type-colored, 60% height) -> Bold name + type badge -> Stats row (HP, ATK, DEF) with mini progress bars -> Price/rarity footer'" },
+        },
+        required: ["content_type", "recommended_display", "card_structure"],
+      },
+      minItems: 1,
+      maxItems: 5,
+      description: "How different types of content items should be displayed. Be VERY specific about grid columns, card internal structure, and responsive breakpoints.",
+    },
   },
   required: [
     "competitive_landscape",
@@ -154,6 +218,7 @@ const toolInputSchema = {
     "ui_component_suggestions",
     "animation_style",
     "layout_blueprint",
+    "item_display_patterns",
   ],
 };
 
@@ -161,14 +226,14 @@ export async function gatherAppContext(prompt: string): Promise<AppContextBrief 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
-  const client = new Anthropic({ apiKey, maxRetries: 0 });
-  const timeoutMs = Number(process.env.STARTBOX_CONTEXT_TIMEOUT_MS ?? 30000);
+  const client = new Anthropic({ apiKey, maxRetries: 0, ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}) });
+  const timeoutMs = Number(process.env.STARTBOX_CONTEXT_TIMEOUT_MS ?? 45000);
 
   try {
     const response = await withTimeout(
       (signal) => client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 2048,
+        model: process.env.AI_MODEL_FAST || "claude-haiku-4-5-20251001",
+        max_tokens: 3072,
         system: [
           {
             type: "text" as const,

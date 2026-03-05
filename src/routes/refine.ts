@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../lib/db.js";
+import { cleanGeneratedCode } from "../lib/codeGenerator.js";
 import { z } from "zod";
 
 export const refineRouter = Router();
@@ -77,10 +78,10 @@ refineRouter.post("/:id/refine", refineRateLimiter, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(503).json({ message: "AI service unavailable" });
 
-  const client = new Anthropic({ apiKey, maxRetries: 0 });
+  const client = new Anthropic({ apiKey, maxRetries: 0, ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}) });
 
   const REFINE_TIMEOUT_MS = 90_000;
-  const CODE_CONTEXT_LIMIT = 10_000;
+  const CODE_CONTEXT_LIMIT = 20_000;
   const codeContext = app.generated_code.length > CODE_CONTEXT_LIMIT
     ? app.generated_code.slice(0, CODE_CONTEXT_LIMIT) + "\n// ... [truncated]"
     : app.generated_code;
@@ -91,7 +92,7 @@ refineRouter.post("/:id/refine", refineRateLimiter, async (req, res) => {
   try {
     if (body.mode === "discuss") {
       const advisory = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: process.env.AI_MODEL_FAST || "claude-haiku-4-5-20251001",
         max_tokens: 1200,
         system: DISCUSS_MODE_SYSTEM_PROMPT,
         messages: [
@@ -115,9 +116,10 @@ refineRouter.post("/:id/refine", refineRateLimiter, async (req, res) => {
       return res.json({ advisory: advisoryText || "No advisory output", mode: body.mode });
     }
 
+    const codeModel = process.env.AI_MODEL_STANDARD || "claude-sonnet-4-6";
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 8000,
+      model: codeModel,
+      max_tokens: 16000,
       system: body.mode === "visual_edit" ? VISUAL_EDIT_SYSTEM_PROMPT : BUILD_MODE_SYSTEM_PROMPT,
       messages: [
         {
@@ -134,15 +136,18 @@ refineRouter.post("/:id/refine", refineRateLimiter, async (req, res) => {
     }, { signal: controller.signal });
     clearTimeout(timeoutHandle);
 
-    const updated_code = response.content
+    const raw_code = response.content
       .filter((b) => b.type === "text")
       .map((b) => (b as { type: "text"; text: string }).text)
       .join("\n")
       .trim();
 
-    if (!updated_code || updated_code.length < 100) {
+    if (!raw_code || raw_code.length < 100) {
       return res.status(502).json({ message: "Refinement produced invalid output" });
     }
+
+    // Clean the code: strip imports, sanitize icon destructuring, ensure render call
+    const updated_code = cleanGeneratedCode(raw_code);
 
     // Save updated code to DB
     await prisma.app.update({
@@ -161,8 +166,8 @@ refineRouter.post("/:id/refine", refineRateLimiter, async (req, res) => {
         updated_code,
         JSON.stringify({ instruction: body.instruction, mode: body.mode }),
       );
-    } catch {
-      // ignore if versions table not available
+    } catch (e) {
+      console.warn("Version insert failed:", e instanceof Error ? e.message : e);
     }
 
     return res.json({ updated_code, mode: body.mode });

@@ -26,6 +26,8 @@ interface PlanData {
   tabs: string[];
 }
 
+type OrchestrateResult = Awaited<ReturnType<typeof api.orchestrateChat>>;
+
 const DID_YOU_KNOW_TIPS = [
   'StartBox apps are built with production-ready code and modern SaaS styling.',
   'Every generated app includes AI-powered features out of the box.',
@@ -48,6 +50,7 @@ interface PersistedState {
   selectedModel: 'sonnet' | 'opus';
   workbenchMode: 'build' | 'visual_edit' | 'discuss';
   headerView?: 'dashboard' | 'preview';
+  isBuilderMode?: boolean;
 }
 
 function saveState(s: PersistedState) {
@@ -69,9 +72,53 @@ function loadState(): PersistedState | null {
   return null;
 }
 
+const BASE44_SEQUENCE = [
+  'Initializing project structure...',
+  'Compiling component modules...',
+  'Linking interactive elements...',
+  'Bundling data layer...',
+  'Optimizing render pipeline...',
+  'Preparing live preview...',
+] as const;
+
+function normalizeBuildStatus(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('initial') || m.includes('reading your request') || m.includes('validating request') || m.includes('interpreting')) {
+    return BASE44_SEQUENCE[0];
+  }
+  if (m.includes('scaffold') || m.includes('designing app direction') || m.includes('reason')) {
+    return BASE44_SEQUENCE[1];
+  }
+  if (m.includes('designing app architecture') || m.includes('planning') || m.includes('research')) {
+    return BASE44_SEQUENCE[2];
+  }
+  if (m.includes('generating source code') || m.includes('compiling') || m.includes('code generation')) {
+    return BASE44_SEQUENCE[3];
+  }
+  if (m.includes('validating') || m.includes('quality') || m.includes('repair') || m.includes('optimizing')) {
+    return BASE44_SEQUENCE[4];
+  }
+  if (m.includes('finalizing') || m.includes('preview') || m.includes('deploy')) {
+    return BASE44_SEQUENCE[5];
+  }
+  return message;
+}
+
+function progressFromStatus(message: string): number {
+  const idx = BASE44_SEQUENCE.indexOf(message as (typeof BASE44_SEQUENCE)[number]);
+  if (idx < 0) return 0;
+  return [8, 20, 35, 55, 78, 92][idx];
+}
+
 export function GeneratorPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const restored = useRef(loadState());
+  const initialBuilderMode =
+    restored.current?.isBuilderMode
+    ?? (
+      !!restored.current?.generatedApp
+      || (restored.current?.chatHistory?.length ?? 0) > 0
+    );
   const [prompt, setPrompt] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(restored.current?.chatHistory ?? []);
   const [generating, setGenerating] = useState(false);
@@ -90,14 +137,16 @@ export function GeneratorPage() {
 
   // ── Builder mode toggle ──
   // Start in builder mode if we have a restored app
-  const [isBuilderMode, setIsBuilderMode] = useState(!!restored.current?.generatedApp);
+  const [isBuilderMode, setIsBuilderMode] = useState(initialBuilderMode);
 
   // ── Streaming state (transient only — events go into chatHistory) ──
   const [statusMessage, setStatusMessage] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const [genStartTime, setGenStartTime] = useState<number | null>(null);
+  const [progressPercent, setProgressPercent] = useState(0);
   const planRef = useRef<PlanData | null>(null);
+  const lastBuildUpdateRef = useRef<{ message: string; at: number }>({ message: '', at: 0 });
 
   // ── Event queue for anti-batching ──
   const eventQueueRef = useRef<ProgressEvent[]>([]);
@@ -105,8 +154,8 @@ export function GeneratorPage() {
 
   // Persist state on change
   useEffect(() => {
-    saveState({ generatedApp, liveCode, chatHistory, selectedModel, workbenchMode, headerView });
-  }, [generatedApp, liveCode, chatHistory, selectedModel, workbenchMode, headerView]);
+    saveState({ generatedApp, liveCode, chatHistory, selectedModel, workbenchMode, headerView, isBuilderMode });
+  }, [generatedApp, liveCode, chatHistory, selectedModel, workbenchMode, headerView, isBuilderMode]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -169,10 +218,40 @@ export function GeneratorPage() {
         console.error('Failed to load app from gallery:', e);
       }
     })();
-  }, [searchParams]);
+  }, [searchParams, generatedApp?.id, setSearchParams]);
 
   function addMessage(role: ChatRole, content: string, type: ChatType = 'message') {
     setChatHistory((prev) => [...prev, { id: newId(), role, content, type, timestamp: Date.now() }]);
+  }
+
+  function addBuildUpdate(content: string, force = false) {
+    const message = content.trim();
+    if (!message) return;
+    const now = Date.now();
+    const last = lastBuildUpdateRef.current;
+    if (!force && last.message === message && now - last.at < 3000) return;
+    lastBuildUpdateRef.current = { message, at: now };
+    setChatHistory((prev) => {
+      const tail = prev[prev.length - 1];
+      if (tail?.type === 'building' && tail.content === message) return prev;
+      return [...prev, { id: newId(), role: 'ai', content: message, type: 'building', timestamp: now }];
+    });
+  }
+
+  async function orchestrateWithTimeout(
+    payload: Parameters<typeof api.orchestrateChat>[0],
+    timeoutMs = 1200,
+  ): Promise<OrchestrateResult | null> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const result = await api.orchestrateChat(payload, controller.signal);
+      return result;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // ── Event queue processor — events become persistent chat messages ──
@@ -182,70 +261,103 @@ export function GeneratorPage() {
     if (!event) { processingRef.current = false; return; }
 
     let delay = 0;
-    switch (event.type) {
-      case 'status':
-        setStatusMessage(event.message);
-        delay = 0;
-        break;
-      case 'narrative':
-        setChatHistory((prev) => [
-          ...prev,
-          { id: newId(), role: 'ai', content: event.message, type: 'narrative', timestamp: Date.now(), data: event.data },
-        ]);
-        delay = 400;
-        break;
-      case 'plan': {
-        const plan = event.data as unknown as PlanData;
-        planRef.current = plan;
-        const featureDetails = plan.feature_details ?? [];
-        const features = featureDetails.length > 0
-          ? featureDetails.map((f, i) => `${i + 1}. ${f.name} — ${f.description}`).join('\n')
-          : (plan.features ?? []).map((f, i) => `${i + 1}. ${f}`).join('\n');
-        const planText = [
-          `**${plan.app_name}**`,
-          `${plan.domain}${plan.design ? ' · ' + plan.design : ''}`,
-          '',
-          'Key Features:',
-          features,
-          '',
-          `Pages: ${(plan.tabs ?? []).join(', ')}`,
-        ].join('\n');
-        setChatHistory((prev) => [
-          ...prev,
-          { id: newId(), role: 'ai', content: planText, type: 'plan', timestamp: Date.now(), data: event.data },
-        ]);
-        delay = 300;
-        break;
+    try {
+      switch (event.type) {
+        case 'status': {
+          const normalized = normalizeBuildStatus(event.message);
+          setStatusMessage(normalized);
+          const stageProgress = progressFromStatus(normalized);
+          if (stageProgress > 0) {
+            setProgressPercent((prev) => Math.max(prev, stageProgress));
+          } else {
+            setProgressPercent((prev) => Math.max(prev, Math.min(prev + 6, 85)));
+          }
+          addBuildUpdate(normalized);
+          delay = 0;
+          break;
+        }
+        case 'narrative':
+          setChatHistory((prev) => [
+            ...prev,
+            { id: newId(), role: 'ai', content: event.message, type: 'narrative', timestamp: Date.now(), data: event.data },
+          ]);
+          setProgressPercent((prev) => Math.max(prev, 35));
+          delay = 400;
+          break;
+        case 'plan': {
+          const raw = (event.data ?? {}) as Partial<PlanData>;
+          const plan: PlanData = {
+            app_name: raw.app_name ?? 'Generated App',
+            domain: raw.domain ?? 'Product App',
+            design: raw.design ?? '',
+            features: Array.isArray(raw.features) ? raw.features : [],
+            feature_details: Array.isArray(raw.feature_details) ? raw.feature_details : [],
+            tabs: Array.isArray(raw.tabs) ? raw.tabs : [],
+          };
+          planRef.current = plan;
+          const featureDetails = plan.feature_details ?? [];
+          const features = featureDetails.length > 0
+            ? featureDetails.map((f, i) => `${i + 1}. ${f.name} — ${f.description}`).join('\n')
+            : (plan.features ?? []).map((f, i) => `${i + 1}. ${f}`).join('\n');
+          const planText = [
+            `**${plan.app_name}**`,
+            `${plan.domain}${plan.design ? ' · ' + plan.design : ''}`,
+            '',
+            'Key Features:',
+            features || '1. Core workflow and pages',
+            '',
+            `Pages: ${(plan.tabs ?? []).join(', ') || 'Main'}`,
+          ].join('\n');
+          setChatHistory((prev) => [
+            ...prev,
+            { id: newId(), role: 'ai', content: planText, type: 'plan', timestamp: Date.now(), data: event.data },
+          ]);
+          setProgressPercent((prev) => Math.max(prev, 45));
+          delay = 300;
+          break;
+        }
+        case 'writing':
+          setChatHistory((prev) => {
+            const isMilestone = !!(event.data?.milestone);
+            const content = isMilestone ? event.message : ((event.data?.path as string) ?? (event.data?.component as string) ?? event.message);
+            if (prev.some((m) => m.type === 'writing' && m.content === content)) return prev;
+            return [...prev, { id: newId(), role: 'ai', content, type: 'writing', timestamp: Date.now(), data: event.data }];
+          });
+          setProgressPercent((prev) => Math.max(prev, Math.min(prev + 5, 88)));
+          delay = event.data?.milestone ? 250 : 180;
+          break;
+        case 'created':
+          setChatHistory((prev) => [
+            ...prev,
+            { id: newId(), role: 'ai', content: 'Created', type: 'created', timestamp: Date.now() },
+          ]);
+          setProgressPercent(90);
+          delay = 100;
+          break;
+        case 'quality':
+          setProgressPercent(94);
+          delay = 0;
+          break;
+        case 'done': {
+          setProgressPercent(100);
+          if (!event.data || typeof event.data !== 'object') {
+            handleStreamError('Generation finished with an invalid payload. Please retry.');
+            break;
+          }
+          const result = event.data as unknown as GenerateResult;
+          handleStreamDone(result);
+          delay = 0;
+          break;
+        }
+        case 'error':
+          handleStreamError(event.message);
+          delay = 0;
+          break;
       }
-      case 'writing':
-        setChatHistory((prev) => {
-          const isMilestone = !!(event.data?.milestone);
-          const content = isMilestone ? event.message : ((event.data?.path as string) ?? (event.data?.component as string) ?? event.message);
-          if (prev.some((m) => m.type === 'writing' && m.content === content)) return prev;
-          return [...prev, { id: newId(), role: 'ai', content, type: 'writing', timestamp: Date.now(), data: event.data }];
-        });
-        delay = event.data?.milestone ? 250 : 180;
-        break;
-      case 'created':
-        setChatHistory((prev) => [
-          ...prev,
-          { id: newId(), role: 'ai', content: 'Created', type: 'created', timestamp: Date.now() },
-        ]);
-        delay = 100;
-        break;
-      case 'quality':
-        delay = 0;
-        break;
-      case 'done': {
-        const result = event.data as unknown as GenerateResult;
-        handleStreamDone(result);
-        delay = 0;
-        break;
-      }
-      case 'error':
-        handleStreamError(event.message);
-        delay = 0;
-        break;
+    } catch (error) {
+      console.error('Failed to process generation event:', error);
+      addMessage('ai', 'Recovered from a generation event error and continuing.', 'narrative');
+      delay = 0;
     }
     setTimeout(processNext, delay);
   }
@@ -299,21 +411,39 @@ export function GeneratorPage() {
 
     setPrompt('');
     addMessage('user', trimmed);
+
     setGenerating(true);
     setGeneratedApp(null);
     setLiveCode(null);
     setFullApp(null);
 
-    setStatusMessage('Analyzing your idea...');
+    setStatusMessage('Interpreting your request...');
     setSuggestions([]);
     setCurrentTipIndex(0);
     setGenStartTime(Date.now());
+    setProgressPercent(2);
     planRef.current = null;
     eventQueueRef.current = [];
     processingRef.current = false;
+    lastBuildUpdateRef.current = { message: '', at: 0 };
+    addBuildUpdate('Interpreting your request and starting the build...', true);
+
+    let generationPrompt = trimmed;
+    const orchestrated = await orchestrateWithTimeout({
+      prompt: trimmed,
+      has_app: false,
+    });
+    if (orchestrated) {
+      generationPrompt = orchestrated.optimized_text?.trim() || trimmed;
+      if (orchestrated.assistant_message) {
+        addMessage('ai', orchestrated.assistant_message, 'narrative');
+      }
+    }
 
     try {
-      const { promise, abort } = generateStream(trimmed, selectedModel, onStreamEvent);
+      setStatusMessage('Starting generation pipeline...');
+      addBuildUpdate('Launching generation pipeline...');
+      const { promise, abort } = generateStream(generationPrompt, selectedModel, onStreamEvent);
       abortRef.current = abort;
       await promise;
     } catch (err) {
@@ -333,9 +463,38 @@ export function GeneratorPage() {
     setPrompt('');
     addMessage('user', trimmed);
     setRefining(true);
+    addBuildUpdate('Planning your requested changes...', true);
+
+    let refinedInstruction = trimmed;
+    let effectiveMode: 'build' | 'visual_edit' | 'discuss' = workbenchMode;
+
+    const orchestrated = await orchestrateWithTimeout({
+      prompt: trimmed,
+      has_app: true,
+      workbench_mode: workbenchMode,
+    }, 1000);
+    if (orchestrated) {
+      if (orchestrated.action === 'discuss') {
+        effectiveMode = 'discuss';
+      } else if (orchestrated.suggested_mode) {
+        effectiveMode = orchestrated.suggested_mode;
+      }
+      refinedInstruction = orchestrated.optimized_text?.trim() || trimmed;
+
+      if (orchestrated.assistant_message) {
+        addMessage('ai', orchestrated.assistant_message, 'narrative');
+      }
+    }
 
     try {
-      const result = await api.refineApp(generatedApp.id, trimmed, workbenchMode);
+      addBuildUpdate(
+        effectiveMode === 'discuss'
+          ? 'Drafting product/design guidance...'
+          : effectiveMode === 'visual_edit'
+            ? 'Applying visual refinements...'
+            : 'Applying functional refinements...',
+      );
+      const result = await api.refineApp(generatedApp.id, refinedInstruction, effectiveMode);
       if (result.mode === 'discuss') {
         setChatHistory((prev) => [
           ...prev,
@@ -349,7 +508,7 @@ export function GeneratorPage() {
           {
             id: newId(),
             role: 'ai',
-            content: workbenchMode === 'visual_edit' ? 'Visual polish applied.' : 'Changes applied.',
+            content: result.mode === 'visual_edit' ? 'Visual polish applied.' : 'Changes applied.',
             type: 'message',
             timestamp: Date.now(),
           },
@@ -381,8 +540,9 @@ export function GeneratorPage() {
     setFullApp(null);
     setActiveSection('overview');
     planRef.current = null;
+    lastBuildUpdateRef.current = { message: '', at: 0 };
     setIsBuilderMode(false);
-    try { sessionStorage.removeItem(SS_KEY); } catch {}
+    try { sessionStorage.removeItem(SS_KEY); } catch { /* noop: sessionStorage may be unavailable */ }
   }
 
   function handleBack() {
@@ -396,8 +556,9 @@ export function GeneratorPage() {
       setFullApp(null);
       setActiveSection('overview');
       planRef.current = null;
+      lastBuildUpdateRef.current = { message: '', at: 0 };
       setIsBuilderMode(false);
-      try { sessionStorage.removeItem(SS_KEY); } catch {}
+      try { sessionStorage.removeItem(SS_KEY); } catch { /* noop: sessionStorage may be unavailable */ }
     }
   }
 
@@ -462,6 +623,7 @@ export function GeneratorPage() {
         onShare={handleShare}
         shareCopied={shareCopied}
         headerView={headerView}
+        progressPercent={progressPercent}
       />
     </div>
   );

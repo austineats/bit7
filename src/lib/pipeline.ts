@@ -8,6 +8,23 @@ function sanitizeNavId(id: string): string {
   return id.toLowerCase().replace(/[^a-z_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'tab';
 }
 
+// Random fallback name generator — no domain-locked templates
+const FALLBACK_ADJECTIVES = ["Swift", "Bright", "Clear", "Prime", "Apex", "Nova", "Flux", "Vibe", "Core", "Zen"];
+const FALLBACK_NOUNS = ["Flow", "Hub", "Kit", "Forge", "Craft", "Lab", "Desk", "Grid", "Vault", "Pulse"];
+
+function generateFallbackName(): string {
+  const adj = FALLBACK_ADJECTIVES[Math.floor(Math.random() * FALLBACK_ADJECTIVES.length)];
+  const noun = FALLBACK_NOUNS[Math.floor(Math.random() * FALLBACK_NOUNS.length)];
+  return `${adj}${noun.toLowerCase()}`;
+}
+
+// Random color from a broad palette — not domain-mapped
+const FALLBACK_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f97316", "#22c55e", "#0ea5e9", "#eab308", "#14b8a6", "#f43f5e", "#a855f7"];
+
+function randomColor(): string {
+  return FALLBACK_COLORS[Math.floor(Math.random() * FALLBACK_COLORS.length)];
+}
+
 function buildDeterministicAppSpec(intent: ReasonedIntent, originalPrompt: string): AppSpec {
   const screens = intent.nav_tabs.map((tab, i) => ({
     nav_id: sanitizeNavId(tab.id),
@@ -53,6 +70,7 @@ export interface PipelineResult {
   spec: AppSpec;
   intent: ReasonedIntent;
   pipeline: string[];
+  degraded: boolean;
 }
 
 export async function runGenerationPipeline(
@@ -64,35 +82,54 @@ export async function runGenerationPipeline(
   pipeline.push("Prompt Reasoning");
   const intent = await translateEnglishPromptWithReasoning(prompt, contextBrief);
 
+  const degraded = intent === null;
+  if (degraded) {
+    console.error("[Pipeline] LLM reasoner returned null — generation cannot produce domain-specific output");
+    console.error("[Pipeline] Prompt was:", JSON.stringify(prompt.slice(0, 200)));
+  }
+
+  // Build a prompt-grounded fallback that preserves the user's words
+  // instead of substituting generic "Smart Tools" templates
+  const fallbackName = generateFallbackName();
+  const promptSnippet = prompt.slice(0, 120).trim();
   const resolvedIntent: ReasonedIntent = intent ?? {
     normalized_prompt: prompt,
-    app_name_hint: prompt.slice(0, 40),
-    primary_goal: prompt,
-    domain: "AI tools",
-    design_philosophy: "Clean, functional tool",
+    app_name_hint: fallbackName,
+    primary_goal: promptSnippet,
+    domain: promptSnippet,  // use actual prompt text, not "Smart Tools"
+    design_philosophy: "Clean, functional design with thoughtful visual hierarchy and smooth interactions",
     target_user: "General users",
-    key_differentiator: "AI-powered analysis and generation",
-    visual_style_keywords: ["clean", "minimal"],
-    premium_features: ["AI analysis", "Instant results"],
+    key_differentiator: `Designed around: ${promptSnippet}`,
+    visual_style_keywords: ["clean", "spacious", "modern"],
+    premium_features: [promptSnippet.slice(0, 60)],
     nav_tabs: [
-      { id: "analyze", label: "Analyze", icon: "Search", layout: "analyzer", purpose: "Main analysis tool" },
-      { id: "results", label: "Results", icon: "BarChart2", layout: "dashboard", purpose: "View results" },
+      { id: "main", label: "Main", icon: "Home", layout: "dashboard", purpose: `Core experience for: ${promptSnippet.slice(0, 80)}` },
+      { id: "settings", label: "Settings", icon: "Settings", layout: "tool", purpose: "Configuration and preferences" },
     ],
-    primary_color: "#6366f1",
+    primary_color: randomColor(),
     theme_style: "light",
     app_icon: "Zap",
     output_format_hint: "markdown",
-    narrative: `A custom-built tool based on your idea: "${prompt.slice(0, 100)}".`,
+    narrative: `${fallbackName} — ${promptSnippet}.`,
     feature_details: [
-      { name: "AI analysis", description: "Intelligent analysis powered by AI" },
-      { name: "Instant results", description: "Get results in seconds" },
+      { name: promptSnippet.slice(0, 50), description: `Core feature based on: ${promptSnippet}` },
     ],
-    reasoning_summary: "Fallback: no LLM available",
+    reasoning_summary: "[DEGRADED] LLM reasoner failed — this is a prompt-grounded fallback, not full AI planning",
+    layout_blueprint: "flexible",
+    animation_keywords: ["smooth", "subtle"],
+    visual_requirements: {
+      hero_pattern: "gradient_banner",
+      card_style: "mixed",
+      data_density: "moderate",
+      color_usage: "full_color",
+    },
+    item_display_format: "grid_cards",
+    typography_style: "bold_headlines",
   };
 
   pipeline.push("Schema Validation");
   const spec = buildDeterministicAppSpec(resolvedIntent, prompt);
   const validatedSpec = appSpecSchema.parse(spec);
 
-  return { spec: validatedSpec, intent: resolvedIntent, pipeline };
+  return { spec: validatedSpec, intent: resolvedIntent, pipeline, degraded };
 }

@@ -88,9 +88,8 @@ export interface QualityBreakdown {
   navigation_correctness: number;
   interaction_richness: number;
   visual_richness: number;
-  component_variety: number;
-  brand_cohesion: number;
   form_styling: number;
+  content_layout_fit: number;
 }
 
 export interface GenerateResult {
@@ -105,6 +104,10 @@ export interface GenerateResult {
   quality_score?: number;
   quality_breakdown?: QualityBreakdown;
   latest_pipeline_summary?: string;
+  model_requested?: 'auto' | 'kimi' | 'sonnet' | 'opus';
+  model_normalized?: 'auto' | 'kimi';
+  model_resolved?: string;
+  provider_resolved?: 'kimi' | 'anthropic' | 'unknown' | string;
   shareUrl: string;
 }
 
@@ -161,7 +164,7 @@ export interface ProgressEvent {
 
 export function generateStream(
   prompt: string,
-  model: 'auto' | 'sonnet' | 'opus' = 'auto',
+  model: 'auto' | 'kimi' | 'sonnet' | 'opus' = 'auto',
   onEvent: (event: ProgressEvent) => void,
 ): { promise: Promise<void>; abort: () => void } {
   const controller = new AbortController();
@@ -217,6 +220,20 @@ export interface ClarifyResult {
   questions?: ClarifyQuestion[];
 }
 
+export interface OrchestrateRequest {
+  prompt: string;
+  has_app: boolean;
+  workbench_mode?: 'build' | 'visual_edit' | 'discuss';
+}
+
+export interface OrchestrateResult {
+  action: 'generate' | 'refine' | 'discuss' | 'clarify';
+  optimized_text: string;
+  assistant_message: string;
+  clarifying_questions?: string[];
+  suggested_mode?: 'build' | 'visual_edit' | 'discuss';
+}
+
 export async function clarifyPrompt(prompt: string): Promise<ClarifyResult> {
   const res = await fetch('/api/clarify', {
     method: 'POST',
@@ -228,7 +245,7 @@ export async function clarifyPrompt(prompt: string): Promise<ClarifyResult> {
 }
 
 export const api = {
-  generate: (prompt: string, model: 'auto' | 'sonnet' | 'opus' = 'auto') =>
+  generate: (prompt: string, model: 'auto' | 'kimi' | 'sonnet' | 'opus' = 'auto') =>
     fetch('/api/generate', {
       method: 'POST',
       body: JSON.stringify({ prompt, model }),
@@ -269,4 +286,12 @@ export const api = {
 
   getPipelineRun: (id: string, runId: string) =>
     fetch(`/api/apps/${id}/pipeline-runs/${runId}`).then((r) => parseResponse<PipelineRunArtifact>(r)),
+
+  orchestrateChat: (body: OrchestrateRequest, signal?: AbortSignal) =>
+    fetch('/api/agent/orchestrate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: JSON_HEADERS,
+      signal,
+    }).then((r) => parseResponse<OrchestrateResult>(r)),
 };

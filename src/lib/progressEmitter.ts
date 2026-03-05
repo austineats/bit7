@@ -3,6 +3,7 @@ export type ProgressEventType =
   | "narrative"
   | "plan"
   | "writing"
+  | "deleted"
   | "created"
   | "quality"
   | "done"

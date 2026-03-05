@@ -7,22 +7,67 @@ export interface QualityScoreInput {
   requestedLayout?: string;
   requestedNavType?: string;
   requestedMood?: string;
+  domainKeywords?: string[];
 }
 
 const WEIGHTS: Record<keyof QualityBreakdown, number> = {
-  layout_diversity:       0.18,
-  visual_uniqueness:      0.16,
-  domain_specificity:     0.15,
-  navigation_correctness: 0.10,
-  interaction_richness:   0.10,
-  visual_richness:        0.10,
-  component_variety:      0.08,
-  brand_cohesion:         0.07,
-  form_styling:           0.06,
+  visual_richness:        0.25,  // does it LOOK polished and visually appealing?
+  interaction_richness:   0.20,  // does the app actually work and feel interactive?
+  visual_uniqueness:      0.15,  // does it look unique, not templated?
+  domain_specificity:     0.15,  // is it specific to the prompt, not generic?
+  content_layout_fit:     0.10,  // does the layout fit the content type?
+  layout_diversity:       0.10,  // interesting layout choices
+  form_styling:           0.03,  // are form elements styled?
+  navigation_correctness: 0.02,  // correct nav pattern?
 };
 
 function clampScore(score: number): number {
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+const DOMAIN_TOKEN_STOPWORDS = new Set([
+  "a", "an", "and", "app", "application", "are", "as", "at", "be", "build", "built", "can", "create", "created",
+  "do", "for", "from", "get", "give", "has", "have", "help", "i", "in", "into", "is", "it", "its", "just", "like",
+  "make", "me", "need", "of", "on", "or", "our", "please", "really", "service", "should", "similar", "something",
+  "system", "that", "the", "their", "them", "then", "there", "these", "this", "to", "tool", "us", "use", "using",
+  "want", "we", "with", "would", "you", "your", "feature", "features", "platform", "product", "workflow", "dashboard",
+  "ai",
+]);
+
+function sanitizeDomainTerms(terms: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const term of terms) {
+    const normalized = String(term ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) continue;
+    const compact = normalized.split(/\s+/).slice(0, 3).join(" ");
+    if (compact.length < 3 || compact.length > 32) continue;
+    if (DOMAIN_TOKEN_STOPWORDS.has(compact)) continue;
+    if (!compact.includes(" ") && DOMAIN_TOKEN_STOPWORDS.has(compact)) continue;
+    if (seen.has(compact)) continue;
+
+    seen.add(compact);
+    out.push(compact);
+  }
+
+  return out;
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasDomainTerm(codeLower: string, term: string): boolean {
+  if (!term.includes(" ")) {
+    const pattern = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
+    return pattern.test(codeLower);
+  }
+  return codeLower.includes(term);
 }
 
 /* ------------------------------------------------------------------ */
@@ -59,10 +104,38 @@ function detectLayout(code: string): {
     isCenteredColumn: /max-w-(2xl|3xl)\s+mx-auto\s+px-5\s+py-6/i.test(code),
     hasHamburger: /hamburger|drawer|slide.*out|fixed.*left-0.*top-0.*w-72/i.test(code),
     hasSegmented: /segmented|rounded-lg\s+p-0\.5.*button.*bg-white.*shadow/i.test(code),
-    hasContextualTabs: !(/sb-nav|<nav\s/).test(code) && /sb-chip.*active/i.test(code),
+    hasContextualTabs: /chip.*active|tab.*active.*border-b/i.test(code),
     hasBreadcrumb: /breadcrumb|chevron.*text-sm.*text-gray/i.test(code),
-    hasTopBarTabs: /sb-nav.*sb-nav-brand.*sb-nav-tabs|sb-nav-centered|sb-nav-spread|sb-nav-minimal/i.test(code),
+    hasTopBarTabs: /nav.*tab|<nav\s/i.test(code),
   };
+}
+
+function detectContentLayoutMismatch(code: string, prompt: string): number {
+  const promptLower = prompt.toLowerCase();
+  let penalty = 0;
+
+  const isCollectionContent = /collect(?:ion|ible)|trading|pokemon|recipe|product|listing|catalog|gallery|shop|marketplace|portfolio|showcase|browse|nft|inventory/i.test(promptLower);
+
+  const hasSingleColumnStats = /flex\s+flex-col.*stat|space-y-\d+.*stat|flex-col.*gap-\d+.*stat/s.test(code);
+  const hasGridCards = /grid-cols-(2|3|4).*gap/s.test(code);
+
+  // Heavy penalty: collection content displayed as stat banners
+  if (isCollectionContent && hasSingleColumnStats && !hasGridCards) {
+    penalty += 25;
+  }
+
+  // Penalty: collection content without any grid
+  if (isCollectionContent && !hasGridCards) {
+    penalty += 15;
+  }
+
+  // Penalty: narrow container for collection content
+  const hasOnlyNarrowContainer = /max-w-3xl\s+mx-auto/.test(code) && !hasGridCards;
+  if (isCollectionContent && hasOnlyNarrowContainer) {
+    penalty += 10;
+  }
+
+  return penalty;
 }
 
 function layoutMatchScore(detected: ReturnType<typeof detectLayout>, requested: string): number {
@@ -108,7 +181,10 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
   const code = input.code;
   const codeLower = code.toLowerCase();
   const promptTokens = new Set(
-    input.prompt.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 3),
+    input.prompt
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 3 && !DOMAIN_TOKEN_STOPWORDS.has(t)),
   );
 
   const detected = detectLayout(code);
@@ -117,16 +193,13 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
   let layoutScore: number;
   if (input.requestedLayout) {
     layoutScore = layoutMatchScore(detected, input.requestedLayout);
-    // Bonus for NOT being centered_column when something else was requested
     if (input.requestedLayout !== "centered_column" && !detected.isCenteredColumn) {
       layoutScore = Math.min(100, layoutScore + 10);
     }
-    // Penalty for falling back to centered column
     if (input.requestedLayout !== "centered_column" && detected.isCenteredColumn) {
       layoutScore = Math.max(0, layoutScore - 20);
     }
   } else {
-    // No layout specified — reward any non-default layout
     const nonDefault = [detected.hasSidebar, detected.hasBottomNav, detected.hasBentoGrid,
       detected.hasSplitPanel, detected.hasFullBleed, detected.hasFloatingPill,
       detected.hasFloatingCards, detected.hasMagazine, detected.hasKanban];
@@ -135,42 +208,49 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
 
   // --- visual_uniqueness ---
   const templatePenalties = [
-    /sb-nav\b.*sb-nav-brand.*sb-nav-tabs/s,
-    /sb-stat.*sb-stat-value.*sb-stat-label/s,
     /How It Works/i,
     /10k\+|50k\+|100k\+/,
     /4\.\d\s*rating/i,
     /Get Started|Start Now/i,
     /what you can create/i,
+    /Lorem ipsum/i,
+    /Sample\s+(text|item|data|product)/i,
+    /Item\s+[1-9]\b/,
+    /John\s+Doe|Jane\s+Doe/i,
   ].filter(p => p.test(code)).length;
 
   const uniqueSignals = [
-    /col-span-2.*row-span/,            // bento grid
-    /fixed\s+bottom/,                  // bottom nav
-    /aside.*border-r|sidebar/i,        // sidebar
-    /border-2.*border-black/,          // neubrutalism
-    /font-serif/,                      // editorial
-    /rounded-full.*backdrop-blur/,     // floating nav
-    /w-\[4[05]%\]/,                    // split panel
-    /overflow-x-auto.*gap-4/,          // kanban
-    /bg-gradient.*min-h-screen/,       // floating cards bg
-    /comparison|before.*after|slider/i, // unique interactions
+    /col-span-2|row-span/,
+    /fixed\s+bottom/,
+    /aside.*border-r|sidebar/i,
+    /rounded-full.*backdrop-blur/,
+    /w-\[4[05]%\]/,
+    /overflow-x-auto/,
+    /masonry|columns-/i,
     /drag|sortable|reorder/i,
-    /swipe|card.*stack/i,
-    /waveform|audio/i,
-    /diff.*viewer/i,
+    /svg.*viewBox/i,
+    /animate-|@keyframes/,
+    /grid-cols-[3-6]/,
+    /aspect-\[/,
+    /var\(--sb-/,
+    /useCallback|useMemo/,
   ].filter(p => p.test(code)).length;
 
   const uniquenessScore = clampScore(
-    Math.max(0, 50 - templatePenalties * 12) + uniqueSignals * 8
+    Math.max(0, 60 - templatePenalties * 8) + uniqueSignals * 6
   );
 
   // --- domain_specificity ---
-  let promptTokenMatches = 0;
-  for (const token of promptTokens) {
-    if (codeLower.includes(token)) promptTokenMatches += 1;
+  const curatedTerms = sanitizeDomainTerms(input.domainKeywords ?? []);
+  const domainTerms: Set<string> = curatedTerms.length > 0
+    ? new Set(curatedTerms)
+    : promptTokens;
+
+  let domainMatches = 0;
+  for (const term of domainTerms) {
+    if (hasDomainTerm(codeLower, term)) domainMatches += 1;
   }
-  const domainRatio = promptTokens.size ? promptTokenMatches / promptTokens.size : 0.5;
+  const domainRatio = domainTerms.size ? domainMatches / domainTerms.size : 0.5;
   const domainScore = clampScore(domainRatio * 100);
 
   // --- navigation_correctness ---
@@ -182,62 +262,86 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
   }
 
   // --- interaction_richness ---
-  const interactionSignals = [/onClick/, /onChange/, /transition/, /hover:/, /animate/, /useState/, /onSubmit/, /onKeyDown/];
+  const interactionSignals = [
+    /onClick/, /onChange/, /transition/, /hover:/, /animate/, /useState/,
+    /onSubmit/, /onKeyDown/, /useStore/, /toast\(/, /filter\(/, /\.sort\(/,
+    /setInterval|setTimeout/, /\.map\(/, /set[A-Z]\w*\(/,
+    /onDrag|draggable/, /useCallback/, /useRef/,
+  ];
   const interactionScore = clampScore(
     (interactionSignals.filter(p => p.test(code)).length / interactionSignals.length) * 100
   );
 
   // --- visual_richness ---
+  // Measures general visual polish — not tied to any specific design system
   const visualSignals = [
-    /bg-gradient-to/,
-    /linear-gradient/,
-    /sb-gradient/,
-    /sb-glow/,
-    /sb-icon-box-gradient/,
-    /glass-btn-gradient/,
-    /sb-gradient-text/,
-    /backdrop-filter|backdrop-blur/,
-    /ScoreRing|svg.*viewBox/i,
-    /animate-/,
-    /sb-gradient-card/,
+    // Gradient backgrounds
+    /gradient|bg-gradient/,
+    // Depth effects
+    /backdrop-blur|shadow-(lg|xl|2xl)/,
+    // Hover/focus effects
+    /hover:-translate|hover:shadow|hover:scale|focus:ring/,
+    // Typography quality
+    /tracking-tight|font-black|font-extrabold/,
     /text-(3xl|4xl|5xl|6xl)/,
-    /tracking-tight|-tracking/,
-    /shadow-(lg|xl|2xl)/,
+    // Animations and transitions
+    /animate-|animation:|transition-all.*duration|@keyframes/,
+    // Visual elements (SVG, charts, progress)
+    /svg.*viewBox|stroke-dashoffset|polyline/i,
+    // CSS custom properties for theming
+    /var\(--|--[a-z]+-[a-z]+\s*:/,
+    // Rounded and polished UI
+    /rounded-(xl|2xl|3xl|full)/,
+    // Generous spacing
+    /py-(12|16|20|24)/,
+    /gap-(5|6|8|10)/,
+    /p-(5|6|8)/,
   ];
-  const visualScore = clampScore(
+  let visualScore = clampScore(
     (visualSignals.filter(p => p.test(code)).length / visualSignals.length) * 100
   );
 
-  // --- component_variety ---
-  const componentTypes = [
-    /sb-card/, /sb-stat/, /sb-accent-card/, /sb-list-item/,
-    /glass-elevated/, /sb-tag/, /sb-avatar/, /sb-chip/,
-    /sb-result-highlight/, /sb-feature-card/, /sb-section-label/,
-    /sb-image-card/, /sb-carousel/, /sb-timeline-item/, /sb-step-dot/,
-    /sb-kanban-col/, /sb-calendar-cell/, /sb-bottom-bar/, /sb-streak-badge/,
-    /sb-chat-bubble/, /sb-gradient-card/, /sb-sparkline/, /sb-meter/,
-    /sb-price/, /sb-rating/, /sb-notification-badge/, /sb-upload-zone/,
-    /sb-toggle/, /sb-table/,
-  ];
-  const varietyCount = componentTypes.filter(p => p.test(code)).length;
-  const varietyScore = clampScore((varietyCount / componentTypes.length) * 120); // cap at 100
+  // --- Typography hierarchy bonus ---
+  // Reward clear heading size hierarchy (different sizes for different heading levels)
+  const hasLargeHero = /text-(5xl|6xl|7xl)/.test(code);
+  const hasMediumSection = /text-(xl|2xl|3xl)/.test(code);
+  if (hasLargeHero && hasMediumSection) visualScore = clampScore(visualScore + 6);
 
-  // --- brand_cohesion ---
-  const brandSignals = [/--sb-primary/, /window\.__sb/, /sb-tag/, /sb-avatar/, /glass-btn/];
-  const brandScore = clampScore(
-    (brandSignals.filter(p => p.test(code)).length / brandSignals.length) * 100
-  );
+  // Cramped spacing penalty
+  const hasGenerousSpacing = /py-(12|16|20|24)/.test(code);
+  const hasCrampedSpacing = /className="[^"]*py-[2-3]\b/.test(code) && !hasGenerousSpacing;
+  if (hasCrampedSpacing) visualScore = clampScore(visualScore - 10);
 
   // --- form_styling ---
   const formElementCount = (code.match(/<input|<textarea|<select/g) || []).length;
-  const styledFormCount = (code.match(/glass-input|sb-dark-input|sb-form-group|sb-chip|sb-toggle|sb-search/g) || []).length;
-  const formRatio = formElementCount === 0 ? 1 : Math.min(1, styledFormCount / Math.max(1, formElementCount));
+  const styledFormCount = (code.match(/className="[^"]*"/g) || []).length;
   const bareFormElements = (code.match(/<(input|textarea|select)\s+(?!.*className)[^>]*>/g) || []).length;
   const formScore = clampScore(
-    formRatio * 80 + (bareFormElements === 0 ? 20 : Math.max(0, 20 - bareFormElements * 5))
+    formElementCount === 0
+      ? 80  // no forms = neutral
+      : Math.max(0, 100 - bareFormElements * 20)
   );
 
-  // h() regression penalty
+  // --- content_layout_fit ---
+  const mismatchPenalty = detectContentLayoutMismatch(code, input.prompt);
+  let contentLayoutScore = 100 - mismatchPenalty;
+
+  // Bonus for responsive grid patterns
+  const hasResponsiveGrid = /grid-cols-1\s+sm:grid-cols-2|grid-cols-2\s+lg:grid-cols-3|sm:grid-cols-2\s+lg:grid-cols-4/.test(code);
+  if (hasResponsiveGrid) contentLayoutScore = Math.min(100, contentLayoutScore + 10);
+
+  // Bonus for mixing 3+ different card/section patterns
+  const cardPatterns = [/rounded-xl.*shadow/, /border.*rounded/, /bg-gradient.*rounded/, /backdrop-blur.*rounded/, /overflow-hidden.*rounded/].filter(p => p.test(code)).length;
+  if (cardPatterns >= 3) contentLayoutScore = Math.min(100, contentLayoutScore + 10);
+
+  // Stat overuse penalty
+  const statPatterns = (code.match(/stat|metric|kpi/gi) || []).length;
+  const contentPatterns = (code.match(/card|grid|list/gi) || []).length;
+  if (statPatterns > 6 && statPatterns > contentPatterns) contentLayoutScore -= 15;
+
+  contentLayoutScore = clampScore(contentLayoutScore);
+
+  // h() regression penalty — penalize React.createElement usage (should be JSX)
   const usesH = /const\s+h\s*=\s*React\.createElement/.test(code);
   const hPenalty = usesH ? 15 : 0;
 
@@ -248,9 +352,8 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
     navigation_correctness: clampScore(navScore - hPenalty),
     interaction_richness: interactionScore,
     visual_richness: visualScore,
-    component_variety: varietyScore,
-    brand_cohesion: brandScore,
     form_styling: formScore,
+    content_layout_fit: clampScore(contentLayoutScore - hPenalty),
   };
 
   const weighted = Object.keys(WEIGHTS).reduce((sum, key) => {
@@ -265,7 +368,7 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Retry feedback                                                     */
+/*  Retry feedback — focuses on functional issues, not design system   */
 /* ------------------------------------------------------------------ */
 
 export function generateRetryFeedback(
@@ -273,62 +376,305 @@ export function generateRetryFeedback(
   code: string,
   requestedLayout?: string,
   requestedNavType?: string,
+  domainKeywords?: string[],
 ): string {
   const issues: string[] = [];
 
   if (breakdown.layout_diversity < 60) {
     issues.push(
       `Layout fell back to centered column. The requested layout was "${requestedLayout ?? 'non-default'}". ` +
-      `Implement the specified page_structure: use the correct grid, sidebar, split-panel, or other structural pattern. ` +
+      `Implement the specified page structure: use the correct grid, sidebar, split-panel, or other structural pattern. ` +
       `Do NOT use max-w-3xl mx-auto px-5 py-6 as a default wrapper.`
     );
   }
 
   if (breakdown.visual_uniqueness < 60) {
     issues.push(
-      'TEMPLATE DETECTED: Remove the logo-top-left + horizontal-tabs + stat-cards pattern. ' +
-      'Create a visually distinct layout. Avoid sb-stat cards as primary content. ' +
-      'Use the specified navigation type and page structure instead of the default pattern.'
+      'The app looks too generic/templated. Remove filler text like "How It Works", "Get Started", fake social proof. ' +
+      'Use domain-specific content and a layout that feels custom-designed for this specific app.'
     );
   }
 
   if (breakdown.domain_specificity < 60) {
-    issues.push('Use more domain-specific terminology in labels, categories, and data values — no generic text.');
+    const curated = sanitizeDomainTerms(domainKeywords ?? []);
+    if (curated.length > 0) {
+      const codeLower = code.toLowerCase();
+      const missing = curated.filter((term) => !hasDomainTerm(codeLower, term)).slice(0, 10);
+      if (missing.length > 0) {
+        issues.push(
+          `Domain specificity is too low. These domain terms are missing: ${missing.join(", ")}. ` +
+          `Use them naturally in headings, labels, button text, card titles, and sample data values.`
+        );
+      } else {
+        issues.push("Use richer domain-specific terminology in labels, categories, and sample data values — avoid generic copy.");
+      }
+    } else {
+      issues.push("Use more domain-specific terminology in labels, categories, and data values — no generic text.");
+    }
   }
 
   if (breakdown.navigation_correctness < 60) {
     issues.push(
       `Wrong navigation pattern. Requested: "${requestedNavType ?? 'non-default'}". ` +
-      `Implement the correct nav: sidebar_nav uses <aside>, bottom_tab_bar uses fixed bottom bar, ` +
-      `floating_pill uses centered pill, etc. Do NOT default to sb-nav horizontal tabs.`
+      `Implement the correct nav: sidebar uses <aside>, bottom tab bar uses fixed bottom, ` +
+      `floating pill uses centered pill, etc.`
     );
   }
 
   if (breakdown.interaction_richness < 60) {
-    issues.push('Add more interactive elements: onClick handlers, filter chips, toggle controls, hover effects.');
+    issues.push(
+      'Add more interactive elements: onClick handlers, filter chips, toggle controls, hover effects. ' +
+      'Every button and card should be clickable and change state.'
+    );
   }
 
   if (breakdown.visual_richness < 60) {
     issues.push(
-      'Improve visual richness: add gradients (bg-gradient-to-br), SVG visualizations, ' +
-      'backdrop-blur effects, shadow-lg/xl, large typography (text-3xl+), ' +
-      'sb-gradient-card for hero elements, glass-btn-gradient for CTAs.'
+      'Visual quality is too low. Consider adding:\n' +
+      '  a) Hover effects on interactive elements (translate, shadow, scale)\n' +
+      '  b) CSS custom properties for theming consistency\n' +
+      '  c) Generous spacing between sections and inside cards\n' +
+      '  d) Animations or transitions for polish\n' +
+      '  e) Clear heading size hierarchy for visual structure\n' +
+      '  f) Depth effects like shadows or backdrop-blur where appropriate'
     );
   }
 
-  if (breakdown.component_variety < 50) {
-    issues.push('Use more varied component types. Mix cards, lists, badges, timelines, chips, avatars — not just one type.');
+  if (breakdown.form_styling < 60) {
+    issues.push('Form elements are missing className styling. Add proper styling to all <input>, <textarea>, <select> elements.');
   }
 
-  if (breakdown.form_styling < 60) {
-    issues.push('Add className="glass-input" to all <input>, <textarea>, <select> elements.');
+  if (breakdown.content_layout_fit < 60) {
+    const isCollection = /collect(?:ion|ible)|trading|pokemon|recipe|product|listing|catalog|gallery|shop|marketplace|portfolio|browse/i.test(code);
+    if (isCollection) {
+      issues.push(
+        'CONTENT-LAYOUT MISMATCH: This app shows collection/visual items but uses stat banners or single-column layout. ' +
+        'Replace with a responsive card grid (grid-cols-2 sm:grid-cols-3 or similar). Each card should have an image placeholder area ' +
+        '(dashed border + icon). Add hover effects for card interactivity.'
+      );
+    }
+
+    // Stat overuse
+    const statCount = (code.match(/stat|metric|kpi/gi) || []).length;
+    if (statCount > 6) {
+      issues.push(
+        'Too many stat/metric elements. Replace some with functional UI components — ' +
+        'cards, lists, interactive elements. Stats work best as a 3-4 item summary row above main content.'
+      );
+    }
   }
 
   if (/const\s+h\s*=\s*React\.createElement/.test(code)) {
     issues.push('CRITICAL: Write JSX syntax, NOT h()/React.createElement. Babel handles transpilation.');
   }
 
+  // Dedicated spacing check
+  const hasGenerousSpacingRetry = /py-(12|16|20|24)/.test(code);
+  const hasCrampedSectionsRetry = /className="[^"]*py-[2-3]\b/.test(code) && !hasGenerousSpacingRetry;
+  if (hasCrampedSectionsRetry) {
+    issues.push(
+      'Spacing is too cramped. Increase padding between sections (py-12+), between cards (gap-5+), and inside cards (p-5+).'
+    );
+  }
+
   return issues.length > 0
     ? issues.map((issue, i) => `${i + 1}. ${issue}`).join('\n')
     : 'General: improve layout diversity, visual uniqueness, and domain specificity.';
+}
+
+/* ------------------------------------------------------------------ */
+/*  Four-Dimension Factory Scoring                                      */
+/*  Code Quality (30%), Design Quality (25%), Security (25%), Perf (20%)*/
+/* ------------------------------------------------------------------ */
+
+export interface FactoryScoreDimensions {
+  code_quality: number;      // 0-100
+  design_quality: number;    // 0-100
+  security: number;          // 0-100
+  performance: number;       // 0-100
+  overall: number;           // weighted 0-100
+  issues: string[];          // actionable issues found
+}
+
+const FACTORY_WEIGHTS = {
+  code_quality: 0.30,
+  design_quality: 0.25,
+  security: 0.25,
+  performance: 0.20,
+};
+
+export function scoreFactoryDimensions(code: string): FactoryScoreDimensions {
+  const issues: string[] = [];
+
+  // ─── CODE QUALITY (30%) ───
+  let codeScore = 80; // baseline
+
+  // Balanced braces
+  const openBraces = (code.match(/\{/g) || []).length;
+  const closeBraces = (code.match(/\}/g) || []).length;
+  if (openBraces !== closeBraces) {
+    codeScore -= 20;
+    issues.push(`Unbalanced braces: ${openBraces} open vs ${closeBraces} close`);
+  }
+
+  // Conditional hooks (React error #311)
+  if (/if\s*\([^)]*\)\s*\{[^}]*use(State|Effect|Callback|Memo|Ref)\s*\(/m.test(code)) {
+    codeScore -= 25;
+    issues.push("Hooks called inside conditionals (will crash with React error #311)");
+  }
+
+  // State management: useState with setter used
+  const useStateCount = (code.match(/useState/g) || []).length;
+  const setterCount = (code.match(/set[A-Z]\w*\(/g) || []).length;
+  if (useStateCount > 0 && setterCount === 0) {
+    codeScore -= 15;
+    issues.push("useState declared but no setter functions called");
+  }
+  if (useStateCount > 0) codeScore += 5; // bonus for using state
+
+  // Error handling in async operations
+  const hasAsyncOps = /await\s|\.then\(|fetch\(/.test(code);
+  const hasTryCatch = /try\s*\{/.test(code);
+  if (hasAsyncOps && !hasTryCatch) {
+    codeScore -= 10;
+    issues.push("Async operations without error handling");
+  }
+
+  // Has App component and render call
+  if (!/function\s+App|const\s+App/.test(code)) {
+    codeScore -= 20;
+    issues.push("Missing App component definition");
+  }
+  if (!/createRoot|ReactDOM\.render/.test(code)) {
+    codeScore -= 20;
+    issues.push("Missing render call");
+  }
+
+  // Bonus: useEffect cleanup
+  if (/useEffect.*return\s*\(\)\s*=>/s.test(code)) codeScore += 5;
+
+  // ─── DESIGN QUALITY (25%) ───
+  let designScore = 60; // baseline
+
+  // Visual hierarchy: heading sizes vary
+  const headingSizes = new Set<string>();
+  for (const m of code.matchAll(/text-(xl|2xl|3xl|4xl|5xl|6xl)/g)) {
+    headingSizes.add(m[1]);
+  }
+  designScore += Math.min(15, headingSizes.size * 5);
+
+  // Spacing consistency
+  const hasConsistentSpacing = /py-(8|10|12|16|20)/.test(code) && /px-(4|6|8)/.test(code);
+  if (hasConsistentSpacing) designScore += 5;
+
+  // Responsive patterns
+  const responsiveClasses = (code.match(/\b(sm|md|lg|xl):/g) || []).length;
+  designScore += Math.min(10, responsiveClasses * 2);
+
+  // CSS custom properties
+  const customProps = (code.match(/var\(--/g) || []).length;
+  designScore += Math.min(10, customProps * 2);
+
+  // Interactive states
+  const hasHoverStates = /hover:/.test(code);
+  const hasFocusStates = /focus:/.test(code);
+  const hasTransitions = /transition/.test(code);
+  if (hasHoverStates) designScore += 5;
+  if (hasFocusStates) designScore += 3;
+  if (hasTransitions) designScore += 5;
+
+  // Color usage penalty for hardcoded hex values in className
+  const hardcodedColors = (code.match(/bg-\[(#[0-9a-f]{6})\]/gi) || []).length;
+  if (hardcodedColors > 5) {
+    designScore -= 5;
+    issues.push("Many hardcoded color values — consider CSS custom properties");
+  }
+
+  // ─── SECURITY (25%) ───
+  let securityScore = 100; // start perfect, deduct for violations
+
+  // No eval or new Function
+  if (/\beval\s*\(/.test(code)) {
+    securityScore -= 30;
+    issues.push("SECURITY: eval() detected — remove immediately");
+  }
+  if (/new\s+Function\s*\(/.test(code)) {
+    securityScore -= 30;
+    issues.push("SECURITY: new Function() detected — remove immediately");
+  }
+
+  // No dangerouslySetInnerHTML without sanitization
+  if (/dangerouslySetInnerHTML/.test(code)) {
+    const hasSanitize = /DOMPurify|sanitize|escape/i.test(code);
+    if (!hasSanitize) {
+      securityScore -= 25;
+      issues.push("SECURITY: dangerouslySetInnerHTML without sanitization");
+    }
+  }
+
+  // No hardcoded credentials/API keys
+  if (/["'](sk-|api[_-]?key|secret|password|token)["']\s*[=:]/i.test(code)) {
+    securityScore -= 25;
+    issues.push("SECURITY: Possible hardcoded credentials detected");
+  }
+
+  // No innerHTML assignments
+  if (/\.innerHTML\s*=/.test(code)) {
+    securityScore -= 15;
+    issues.push("SECURITY: Direct innerHTML assignment — use React JSX instead");
+  }
+
+  // ─── PERFORMANCE (20%) ───
+  let perfScore = 80; // baseline
+
+  // Code size (use string length as proxy — safe in all Node.js environments)
+  const codeSize = code.length;
+  if (codeSize > 15000) {
+    perfScore -= 10;
+    issues.push(`Code size (${(codeSize / 1024).toFixed(1)}KB) exceeds 15KB — consider simplifying`);
+  } else if (codeSize < 8000) {
+    perfScore += 5; // bonus for lean code
+  }
+
+  // Memo patterns for expensive operations
+  const hasUseMemo = /useMemo/.test(code);
+  const hasUseCallback = /useCallback/.test(code);
+  if (hasUseMemo) perfScore += 5;
+  if (hasUseCallback) perfScore += 5;
+
+  // Re-render risk: objects/arrays created in render body
+  const inlineObjects = (code.match(/=\s*\{[^}]+\}\s*;/g) || []).length;
+  const inlineArrays = (code.match(/=\s*\[[^\]]+\]\s*;/g) || []).length;
+  if (inlineObjects + inlineArrays > 10 && !hasUseMemo) {
+    perfScore -= 5;
+  }
+
+  // Console.log removal
+  const consoleLogs = (code.match(/console\.(log|warn|error)/g) || []).length;
+  if (consoleLogs > 3) {
+    perfScore -= 5;
+    issues.push("Remove console.log statements from production code");
+  }
+
+  // Clamp all scores
+  codeScore = clampScore(codeScore);
+  designScore = clampScore(designScore);
+  securityScore = clampScore(securityScore);
+  perfScore = clampScore(perfScore);
+
+  const overall = clampScore(
+    codeScore * FACTORY_WEIGHTS.code_quality +
+    designScore * FACTORY_WEIGHTS.design_quality +
+    securityScore * FACTORY_WEIGHTS.security +
+    perfScore * FACTORY_WEIGHTS.performance
+  );
+
+  return {
+    code_quality: codeScore,
+    design_quality: designScore,
+    security: securityScore,
+    performance: perfScore,
+    overall,
+    issues,
+  };
 }

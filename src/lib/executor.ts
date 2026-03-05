@@ -63,10 +63,10 @@ export async function executeApp(
     outputText = `**[Mock Mode — No API Key]**\n\nThis is a placeholder response. Add \`ANTHROPIC_API_KEY\` to your \`.env\` to get real AI output.\n\n---\n\n${fieldSummary}`;
     tokensUsed = 0;
   } else {
-    const client = new Anthropic({ apiKey, maxRetries: 0 });
+    const client = new Anthropic({ apiKey, maxRetries: 0, ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}) });
 
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: process.env.AI_MODEL_FAST || "claude-haiku-4-5-20251001",
       max_tokens: Math.min(screen.ai_logic.max_tokens, 2000),
       temperature: Math.min(screen.ai_logic.temperature, 0.9),
       system: screen.ai_logic.system_prompt,

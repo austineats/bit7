@@ -71,6 +71,10 @@ model PipelineRun {
   artifact          Json
   quality_score     Int
   quality_breakdown Json?
+  state_history     Json?
+  total_duration_ms Int?
+  repair_count      Int      @default(0)
+  final_state       String?
   created_at        DateTime @default(now())
 
   app               App      @relation(fields: [app_id], references: [id], onDelete: Cascade)

@@ -4,13 +4,18 @@ import { generateFromPrompt } from "../lib/generator.js";
 import { generateRateLimiter, checkContentSafety } from "../lib/safety.js";
 import { canSpend, getDailySpend, getDailyCap } from "../lib/costTracker.js";
 import type { ProgressCallback } from "../lib/progressEmitter.js";
+import { resolveModel } from "../lib/modelResolver.js";
 
 export const generateRouter = Router();
 
 const generateBodySchema = z.object({
   prompt: z.string().min(10).max(4000),
-  model: z.enum(["auto", "sonnet", "opus"]).optional().default("auto"),
+  model: z.enum(["auto", "kimi", "sonnet", "opus"]).optional().default("auto"),
 });
+
+function normalizeRequestedModel(model: "auto" | "kimi" | "sonnet" | "opus"): "auto" | "kimi" {
+  return model === "auto" ? "auto" : "kimi";
+}
 
 generateRouter.post("/", generateRateLimiter, async (req, res) => {
   try {
@@ -42,33 +47,60 @@ generateRouter.post("/", generateRateLimiter, async (req, res) => {
         res.write(": heartbeat\n\n");
       }, 15000);
 
+      const abortController = new AbortController();
       let disconnected = false;
       req.on("close", () => {
         disconnected = true;
+        abortController.abort();
         clearInterval(heartbeat);
       });
 
       const onProgress: ProgressCallback = (event) => {
-        if (!disconnected) {
-          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        if (!disconnected && !res.writableEnded) {
+          try {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          } catch (e) {
+            disconnected = true;
+            console.warn("SSE write failed (client likely disconnected):", e instanceof Error ? e.message : e);
+          }
         }
       };
 
       try {
-        const result = await generateFromPrompt(body.prompt, body.model, onProgress);
+        const result = await generateFromPrompt(body.prompt, body.model, onProgress, abortController.signal);
+        // Only emit done if we have actual generated code
         if (!disconnected) {
-          res.write(`data: ${JSON.stringify({ type: "done", message: "Complete", data: result })}\n\n`);
+          if (result.generated_code) {
+            res.write(`data: ${JSON.stringify({
+              type: "done",
+              message: "Complete",
+              data: {
+                ...result,
+                model_requested: body.model,
+                model_normalized: normalizeRequestedModel(body.model),
+                model_resolved: resolveModel("standard"),
+                provider_resolved: "kimi",
+              },
+            })}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify({ type: "error", message: "Generation completed but no code was produced. Please try again.", error_code: "NO_CODE_PRODUCED" })}\n\n`);
+          }
         }
       } catch (error) {
         if (!disconnected) {
           let msg = "Generation failed";
+          let errorCode = "GENERATION_FAILED";
           if (error instanceof ZodError) {
             msg = "App configuration error — please try a different prompt";
+            errorCode = "VALIDATION_ERROR";
             console.error("Zod validation error in generation:", error.issues);
           } else if (error instanceof Error) {
             msg = error.message;
+            if (msg.includes("timed out")) errorCode = "PROVIDER_TIMEOUT";
+            else if (msg.includes("NO_CODE_PRODUCED")) errorCode = "NO_CODE_PRODUCED";
+            else if (msg.includes("connection pool")) errorCode = "DB_CONNECTION_ERROR";
           }
-          res.write(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: "error", message: msg, error_code: errorCode })}\n\n`);
         }
       } finally {
         clearInterval(heartbeat);
@@ -83,7 +115,16 @@ generateRouter.post("/", generateRateLimiter, async (req, res) => {
           setTimeout(() => reject(new Error(`Generation timed out after ${routeTimeoutMs}ms`)), routeTimeoutMs),
         ),
       ]);
-      return res.status(201).json(result);
+      if (!result.generated_code) {
+        return res.status(502).json({ message: "Generation completed but no code was produced", error_code: "NO_CODE_PRODUCED" });
+      }
+      return res.status(201).json({
+        ...result,
+        model_requested: body.model,
+        model_normalized: normalizeRequestedModel(body.model),
+        model_resolved: resolveModel("standard"),
+        provider_resolved: "kimi",
+      });
     }
   } catch (error) {
     if (error instanceof ZodError) {

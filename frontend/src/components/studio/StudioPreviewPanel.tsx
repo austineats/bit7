@@ -19,6 +19,7 @@ interface StudioPreviewPanelProps {
   generating: boolean;
   statusMessage: string;
   currentTipIndex: number;
+  progressPercent: number;
 }
 
 type Viewport = 'desktop' | 'mobile';
@@ -83,6 +84,7 @@ export function StudioPreviewPanel({
   generating,
   statusMessage,
   currentTipIndex,
+  progressPercent,
 }: StudioPreviewPanelProps) {
   const [viewport, setViewport] = useState<Viewport>('desktop');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -125,7 +127,7 @@ export function StudioPreviewPanel({
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Building your idea...</h3>
             <p className="text-sm text-indigo-600 mb-6">{statusMessage}</p>
             <div className="w-48 h-1.5 bg-gray-200 rounded-full mx-auto overflow-hidden mb-6">
-              <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full animate-pulse" style={{ width: '60%' }} />
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${progressPercent}%` }} />
             </div>
             <div className="bg-indigo-50 rounded-lg px-4 py-3 max-w-xs mx-auto">
               <div className="text-[10px] font-medium text-indigo-400 uppercase tracking-wider mb-1">Did you know?</div>

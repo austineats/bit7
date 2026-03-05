@@ -58,11 +58,11 @@ export async function clarifyPrompt(prompt: string): Promise<ClarifyResult> {
     return { clear: true };
   }
 
-  const client = new Anthropic({ apiKey, maxRetries: 0 });
+  const client = new Anthropic({ apiKey, maxRetries: 0, ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}) });
 
   try {
     const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: process.env.AI_MODEL_FAST || "claude-haiku-4-5-20251001",
       max_tokens: 500,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],

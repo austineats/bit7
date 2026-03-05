@@ -1,6 +1,6 @@
 export type InputFieldType = "text" | "textarea" | "select" | "number";
-export type LayoutType = "tool" | "analyzer" | "generator" | "dashboard" | "planner";
-export type OutputFormat = "markdown" | "cards" | "score_card" | "report" | "list" | "plain";
+export type LayoutType = string;
+export type OutputFormat = string;
 export type VisualArchetype =
   | "marketplace"
   | "health_tracker"
@@ -80,9 +80,8 @@ export interface QualityBreakdown {
   navigation_correctness: number;
   interaction_richness: number;
   visual_richness: number;
-  component_variety: number;
-  brand_cohesion: number;
   form_styling: number;
+  content_layout_fit: number;
 }
 
 export interface PipelineRunArtifact {
@@ -99,16 +98,17 @@ export interface PipelineRunArtifact {
 }
 
 export interface UIBlueprint {
-  layout_skeleton: string[];
-  design_tokens: {
+  nav_type?: string;
+  layout_skeleton?: string[];
+  design_tokens?: {
     primary_color: string;
     radius: string;
     shadow_style: string;
     spacing_scale: string;
   };
-  component_tree: string[];
-  interaction_plan: string[];
-  state_design: {
+  component_tree?: string[];
+  interaction_plan?: string[];
+  state_design?: {
     empty: string;
     loading: string;
     error: string;

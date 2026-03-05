@@ -14,110 +14,224 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>App Preview</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <script crossorigin src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
-          },
-          spacing: {
-            '4.5': '1.125rem',
-            '13': '3.25rem',
-            '15': '3.75rem',
-            '18': '4.5rem',
-          },
-        },
-      },
-    };
+    window.__sbTailwindLoaded = false;
+    window.__sbTailwindFailed = false;
+    window.__sbTailwindSource = 'none';
+    (function() {
+      function markLoaded(source) {
+        window.__sbTailwindLoaded = true;
+        window.__sbTailwindSource = source;
+      }
+
+      function loadScript(src, source, onError) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.crossOrigin = 'anonymous';
+        s.onload = function() { markLoaded(source); };
+        s.onerror = function() { if (onError) onError(); };
+        document.head.appendChild(s);
+      }
+
+      function loadTailwindFromCdn() {
+        // Prefer Tailwind Play CDN; fallback to browser runtime mirrors if blocked.
+        loadScript('https://cdn.tailwindcss.com', 'tailwind-play-cdn', function() {
+          loadScript('https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4', 'tailwind-browser-jsdelivr', function() {
+            loadScript('https://unpkg.com/@tailwindcss/browser@4', 'tailwind-browser-unpkg', function() {
+              window.__sbTailwindFailed = true;
+            });
+          });
+        });
+      }
+      window.__sbLoadTailwindCdn = loadTailwindFromCdn;
+      loadTailwindFromCdn();
+    })();
   </script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/lucide-react/dist/umd/lucide-react.js"></script>
+  <script>
+    // Guard: verify React and ReactDOM loaded from CDN before proceeding
+    if (!window.React || !window.ReactDOM) {
+      window.__sbCdnFailed = true;
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.innerHTML = '<div style="padding:2rem;font-family:system-ui,sans-serif;color:#ef4444;text-align:center">' +
+          '<h2 style="margin-bottom:0.5rem">Runtime dependency failed to load</h2>' +
+          '<p style="color:#666">React/ReactDOM CDN unavailable. Check your network connection and reload.</p>' +
+          '</div>';
+      });
+    } else {
+      window.react = window.React;
+      window['react-dom'] = window.ReactDOM;
+    }
+  </script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/lucide-react@0.575.0/dist/umd/lucide-react.js"></script>
+  <script crossorigin src="https://unpkg.com/lucide-react@0.575.0/dist/umd/lucide-react.js"></script>
   <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-      background: #ffffff;
-      color: rgba(0,0,0,0.87);
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      overflow-x: hidden;
-      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     }
-    #root { min-height: 100vh; background: #ffffff; color: #111827; }
+    button { -webkit-tap-highlight-color: transparent; }
+    svg { display: inline-block; vertical-align: middle; }
+    #root { width: 100%; min-height: 100vh; }
 
-    /* ── Text visibility safety net — prevent invisible text on white backgrounds ── */
+    /* ── Text visibility safety net — scoped to .sb-fallback namespace ── */
     h1, h2, h3, h4, h5, h6 { color: inherit; }
     p, span, li, td, th, label, dt, dd { color: inherit; }
-    /* Cards/containers on white bg should inherit dark text */
-    .bg-white, [class*="bg-gray-5"], [class*="bg-gray-1"] { color: #111827; }
 
-    /* ── Critical CSS fallback — ensures layout works before Tailwind JIT processes ── */
+    /* ── Core utility fallback (keeps previews readable if Tailwind CDN fails) ── */
     .min-h-screen { min-height: 100vh; }
-    .flex { display: flex; }
-    .grid { display: grid; }
-    .inline-flex { display: inline-flex; }
-    .hidden { display: none; }
-    .items-center { align-items: center; }
-    .items-start { align-items: flex-start; }
-    .justify-center { justify-content: center; }
-    .justify-between { justify-content: space-between; }
-    .flex-col { flex-direction: column; }
-    .flex-1 { flex: 1 1 0%; }
-    .flex-shrink-0 { flex-shrink: 0; }
-    .flex-wrap { flex-wrap: wrap; }
-    .gap-1 { gap: 0.25rem; } .gap-2 { gap: 0.5rem; } .gap-3 { gap: 0.75rem; }
-    .gap-4 { gap: 1rem; } .gap-5 { gap: 1.25rem; } .gap-6 { gap: 1.5rem; }
-    .gap-8 { gap: 2rem; } .gap-10 { gap: 2.5rem; }
-    .w-full { width: 100%; } .h-full { height: 100%; }
-    .max-w-xs { max-width: 20rem; } .max-w-sm { max-width: 24rem; }
-    .max-w-md { max-width: 28rem; } .max-w-lg { max-width: 32rem; }
-    .max-w-xl { max-width: 36rem; } .max-w-2xl { max-width: 42rem; }
-    .max-w-3xl { max-width: 48rem; } .max-w-4xl { max-width: 56rem; }
-    .max-w-5xl { max-width: 64rem; } .max-w-6xl { max-width: 72rem; }
+    .min-h-0 { min-height: 0; }
+    .h-full { height: 100%; }
+    .h-auto { height: auto; }
+    .max-h-full { max-height: 100%; }
+    .w-full { width: 100%; }
+    .w-auto { width: auto; }
+    .w-screen { width: 100vw; }
+    .w-10 { width: 2.5rem; }
+    .h-10 { height: 2.5rem; }
+    .max-w-full { max-width: 100%; }
+    .max-w-none { max-width: none; }
+    .max-w-xs { max-width: 20rem; }
+    .max-w-sm { max-width: 24rem; }
+    .max-w-md { max-width: 28rem; }
+    .max-w-lg { max-width: 32rem; }
+    .max-w-xl { max-width: 36rem; }
+    .max-w-2xl { max-width: 42rem; }
+    .max-w-3xl { max-width: 48rem; }
+    .max-w-4xl { max-width: 56rem; }
+    .max-w-5xl { max-width: 64rem; }
+    .max-w-6xl { max-width: 72rem; }
+    .max-w-7xl { max-width: 80rem; }
     .mx-auto { margin-left: auto; margin-right: auto; }
-    .text-center { text-align: center; } .text-left { text-align: left; }
-    .relative { position: relative; } .absolute { position: absolute; }
-    .sticky { position: sticky; } .fixed { position: fixed; }
-    .inset-0 { inset: 0; } .top-0 { top: 0; } .left-0 { left: 0; } .right-0 { right: 0; } .bottom-0 { bottom: 0; }
-    .z-10 { z-index: 10; } .z-50 { z-index: 50; }
-    .overflow-hidden { overflow: hidden; } .overflow-auto { overflow: auto; }
+    .my-2 { margin-top: 0.5rem; margin-bottom: 0.5rem; }
+    .my-4 { margin-top: 1rem; margin-bottom: 1rem; }
+    .mt-1 { margin-top: 0.25rem; }
+    .mt-2 { margin-top: 0.5rem; }
+    .mt-3 { margin-top: 0.75rem; }
+    .mt-4 { margin-top: 1rem; }
+    .mt-6 { margin-top: 1.5rem; }
+    .mt-8 { margin-top: 2rem; }
+    .mb-1 { margin-bottom: 0.25rem; }
+    .mb-2 { margin-bottom: 0.5rem; }
+    .mb-3 { margin-bottom: 0.75rem; }
+    .mb-4 { margin-bottom: 1rem; }
+    .mb-6 { margin-bottom: 1.5rem; }
+    .p-0 { padding: 0; }
+    .p-1 { padding: 0.25rem; }
+    .p-2 { padding: 0.5rem; }
+    .p-3 { padding: 0.75rem; }
+    .p-4 { padding: 1rem; }
+    .p-5 { padding: 1.25rem; }
+    .p-6 { padding: 1.5rem; }
+    .p-8 { padding: 2rem; }
+    .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
+    .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
     .px-4 { padding-left: 1rem; padding-right: 1rem; }
+    .px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
     .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
-    .px-8 { padding-left: 2rem; padding-right: 2rem; }
+    .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
     .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
     .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
     .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+    .py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
     .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
-    .py-20 { padding-top: 5rem; padding-bottom: 5rem; }
-    .pt-20 { padding-top: 5rem; } .pt-24 { padding-top: 6rem; }
-    .pb-24 { padding-bottom: 6rem; } .pb-32 { padding-bottom: 8rem; }
-    .p-4 { padding: 1rem; } .p-5 { padding: 1.25rem; } .p-6 { padding: 1.5rem; }
-    .mb-1 { margin-bottom: 0.25rem; } .mb-2 { margin-bottom: 0.5rem; }
-    .mb-3 { margin-bottom: 0.75rem; } .mb-4 { margin-bottom: 1rem; }
-    .mb-6 { margin-bottom: 1.5rem; } .mb-8 { margin-bottom: 2rem; }
-    .mb-10 { margin-bottom: 2.5rem; } .mb-16 { margin-bottom: 4rem; }
-    .mt-1 { margin-top: 0.25rem; } .mt-2 { margin-top: 0.5rem; }
-    .mt-4 { margin-top: 1rem; } .mt-8 { margin-top: 2rem; } .mt-12 { margin-top: 3rem; }
-    .bg-white { background-color: #fff; }
-    .text-white { color: #fff; }
-    .text-gray-900 { color: #111827; } .text-gray-700 { color: #374151; }
-    .text-gray-600 { color: #4b5563; } .text-gray-500 { color: #6b7280; }
+    .py-10 { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+    .py-12 { padding-top: 3rem; padding-bottom: 3rem; }
+    .pb-2 { padding-bottom: 0.5rem; }
+    .pb-4 { padding-bottom: 1rem; }
+    .pt-2 { padding-top: 0.5rem; }
+    .pt-4 { padding-top: 1rem; }
+    .flex { display: flex; }
+    .inline-flex { display: inline-flex; }
+    .grid { display: grid; }
+    .hidden { display: none; }
+    .block { display: block; }
+    .flex-col { flex-direction: column; }
+    .flex-wrap { flex-wrap: wrap; }
+    .flex-1 { flex: 1 1 0%; }
+    .flex-auto { flex: 1 1 auto; }
+    .flex-none { flex: none; }
+    .shrink-0 { flex-shrink: 0; }
+    .grow { flex-grow: 1; }
+    .items-center { align-items: center; }
+    .items-start { align-items: flex-start; }
+    .items-end { align-items: flex-end; }
+    .items-stretch { align-items: stretch; }
+    .justify-center { justify-content: center; }
+    .justify-start { justify-content: flex-start; }
+    .justify-between { justify-content: space-between; }
+    .justify-around { justify-content: space-around; }
+    .justify-evenly { justify-content: space-evenly; }
+    .justify-end { justify-content: flex-end; }
+    .gap-1 { gap: 0.25rem; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-3 { gap: 0.75rem; }
+    .gap-4 { gap: 1rem; }
+    .gap-5 { gap: 1.25rem; }
+    .gap-6 { gap: 1.5rem; }
+    .gap-8 { gap: 2rem; }
+    .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem; }
+    .space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.5rem; }
+    .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.75rem; }
+    .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem; }
+    .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .rounded { border-radius: 0.25rem; }
+    .rounded-md { border-radius: 0.375rem; }
+    .rounded-lg { border-radius: 0.5rem; }
+    .rounded-xl { border-radius: 0.75rem; }
+    .rounded-2xl { border-radius: 1rem; }
+    .rounded-3xl { border-radius: 1.5rem; }
+    .rounded-full { border-radius: 9999px; }
+    .border { border: 1px solid #e5e7eb; }
+    .border-0 { border: 0; }
+    .border-b { border-bottom: 1px solid #e5e7eb; }
+    .border-t { border-top: 1px solid #e5e7eb; }
+    .border-gray-100 { border-color: #f3f4f6; }
+    .border-gray-200 { border-color: #e5e7eb; }
+    .border-gray-300 { border-color: #d1d5db; }
+    .bg-white { background: #ffffff; }
+    .bg-black { background: #000000; }
+    .bg-gray-50 { background: #f9fafb; }
+    .bg-gray-100 { background: #f3f4f6; }
+    .bg-gray-200 { background: #e5e7eb; }
+    .bg-gray-900 { background: #111827; }
+    .bg-indigo-50 { background: #eef2ff; }
+    .bg-indigo-100 { background: #e0e7ff; }
+    .bg-indigo-500 { background: #6366f1; }
+    .bg-indigo-600 { background: #4f46e5; }
+    .bg-purple-500 { background: #a855f7; }
+    .bg-purple-600 { background: #9333ea; }
+    .bg-emerald-100 { background: #d1fae5; }
+    .bg-emerald-500 { background: #10b981; }
+    .bg-emerald-600 { background: #059669; }
+    .bg-teal-600 { background: #0d9488; }
+    .bg-red-50 { background: #fef2f2; }
+    .bg-orange-100 { background: #ffedd5; }
+    .text-white { color: #ffffff; }
+    .text-black { color: #000000; }
     .text-gray-400 { color: #9ca3af; }
-    .bg-gray-50 { background-color: #f9fafb; } .bg-gray-100 { background-color: #f3f4f6; }
-    .bg-gray-950 { background-color: #030712; }
-    .border { border-width: 1px; } .border-b { border-bottom-width: 1px; }
-    .border-gray-100 { border-color: #f3f4f6; } .border-gray-200 { border-color: #e5e7eb; }
-    .rounded-lg { border-radius: 0.5rem; } .rounded-xl { border-radius: 0.75rem; }
-    .rounded-2xl { border-radius: 1rem; } .rounded-full { border-radius: 9999px; }
-    .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
-    .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); }
+    .text-gray-500 { color: #6b7280; }
+    .text-gray-600 { color: #4b5563; }
+    .text-gray-700 { color: #374151; }
+    .text-gray-800 { color: #1f2937; }
+    .text-gray-900 { color: #111827; }
+    .text-indigo-500 { color: #6366f1; }
+    .text-indigo-600 { color: #4f46e5; }
+    .text-indigo-700 { color: #4338ca; }
+    .text-emerald-100 { color: #d1fae5; }
+    .text-emerald-600 { color: #059669; }
+    .text-red-200 { color: #fecaca; }
+    .text-red-700 { color: #b91c1c; }
+    .text-orange-600 { color: #ea580c; }
     .text-xs { font-size: 0.75rem; line-height: 1rem; }
     .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
     .text-base { font-size: 1rem; line-height: 1.5rem; }
@@ -127,42 +241,86 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
     .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
     .text-5xl { font-size: 3rem; line-height: 1; }
-    .font-medium { font-weight: 500; } .font-semibold { font-weight: 600; }
-    .font-bold { font-weight: 700; } .font-black { font-weight: 900; }
-    .leading-relaxed { line-height: 1.625; }
+    .font-medium { font-weight: 500; }
+    .font-semibold { font-weight: 600; }
+    .font-bold { font-weight: 700; }
+    .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); }
+    .shadow-lg { box-shadow: 0 10px 15px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05); }
+    .overflow-hidden { overflow: hidden; }
+    .overflow-auto { overflow: auto; }
+    .overflow-x-auto { overflow-x: auto; }
+    .overflow-y-auto { overflow-y: auto; }
+    .transition-colors { transition: color .2s ease, background-color .2s ease, border-color .2s ease; }
+    .transition-all { transition: all .2s ease; }
+    .duration-300 { transition-duration: .3s; }
+    .duration-500 { transition-duration: .5s; }
     .cursor-pointer { cursor: pointer; }
-    .pointer-events-none { pointer-events: none; }
-    .transition-all { transition-property: all; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.4,0,0.2,1); }
-    .transition-colors { transition-property: color, background-color, border-color; transition-duration: 150ms; }
+    .text-center { text-align: center; }
+    .text-left { text-align: left; }
+    .text-right { text-align: right; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .divide-y > :not([hidden]) ~ :not([hidden]) { border-top: 1px solid #f3f4f6; }
+    .hover\\:bg-gray-50:hover { background: #f9fafb; }
+    .hover\\:bg-gray-100:hover { background: #f3f4f6; }
+    .hover\\:bg-emerald-600:hover { background: #059669; }
+    .hover\\:bg-gray-800:hover { background: #1f2937; }
+    .hover\\:text-red-500:hover { color: #ef4444; }
+    .hover\\:text-gray-700:hover { color: #374151; }
+    .focus\\:outline-none:focus { outline: none; }
+    .focus\\:ring-2:focus { box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+    .relative { position: relative; }
+    .absolute { position: absolute; }
+    .fixed { position: fixed; }
+    .sticky { position: sticky; }
+    .inset-0 { inset: 0; }
+    .top-0 { top: 0; }
+    .bottom-0 { bottom: 0; }
+    .left-0 { left: 0; }
+    .right-0 { right: 0; }
+    .z-10 { z-index: 10; }
+    .z-20 { z-index: 20; }
+    .z-30 { z-index: 30; }
+    .z-40 { z-index: 40; }
+    .z-50 { z-index: 50; }
+    .bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }
+    .bg-gradient-to-l { background-image: linear-gradient(to left, var(--tw-gradient-stops)); }
+    .bg-gradient-to-b { background-image: linear-gradient(to bottom, var(--tw-gradient-stops)); }
+    .bg-gradient-to-t { background-image: linear-gradient(to top, var(--tw-gradient-stops)); }
+    .bg-gradient-to-br { background-image: linear-gradient(to bottom right, var(--tw-gradient-stops)); }
+    .bg-gradient-to-bl { background-image: linear-gradient(to bottom left, var(--tw-gradient-stops)); }
+    .from-indigo-500 { --tw-gradient-from: #6366f1; --tw-gradient-to: rgba(99,102,241,0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    .from-emerald-500 { --tw-gradient-from: #10b981; --tw-gradient-to: rgba(16,185,129,0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    .from-green-500 { --tw-gradient-from: #22c55e; --tw-gradient-to: rgba(34,197,94,0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    .from-blue-500 { --tw-gradient-from: #3b82f6; --tw-gradient-to: rgba(59,130,246,0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    .from-slate-900 { --tw-gradient-from: #0f172a; --tw-gradient-to: rgba(15,23,42,0); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    .to-purple-600 { --tw-gradient-to: #9333ea; }
+    .to-emerald-600 { --tw-gradient-to: #059669; }
+    .to-teal-600 { --tw-gradient-to: #0d9488; }
+    .to-blue-600 { --tw-gradient-to: #2563eb; }
+    .to-slate-800 { --tw-gradient-to: #1e293b; }
+    .to-white { --tw-gradient-to: #ffffff; }
+    .to-gray-50 { --tw-gradient-to: #f9fafb; }
+    .via-white { --tw-gradient-via: #ffffff; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to); }
+    .via-slate-50 { --tw-gradient-via: #f8fafc; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to); }
     @media (min-width: 640px) {
-      .sm\\:flex { display: flex; }
-      .sm\\:flex-row { flex-direction: row; }
       .sm\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sm\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .sm\\:text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+      .sm\\:text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+      .sm\\:text-6xl { font-size: 3.75rem; line-height: 1; }
     }
     @media (min-width: 768px) {
-      .md\\:text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-      .md\\:text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
-      .md\\:text-5xl { font-size: 3rem; line-height: 1; }
-      .md\\:text-6xl { font-size: 3.75rem; line-height: 1; }
-      .md\\:text-7xl { font-size: 4.5rem; line-height: 1; }
       .md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .md\\:block { display: block; }
-      .md\\:flex { display: flex; }
+      .md\\:px-8 { padding-left: 2rem; padding-right: 2rem; }
+      .md\\:text-2xl { font-size: 1.5rem; line-height: 2rem; }
     }
     @media (min-width: 1024px) {
       .lg\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .lg\\:text-7xl { font-size: 4.5rem; line-height: 1; }
     }
-    .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .space-y-5 > * + * { margin-top: 1.25rem; }
-    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .whitespace-nowrap { white-space: nowrap; }
-
-    /* ── Premium typography — tight letter-spacing on headings ── */
-    h1, h2, h3 { letter-spacing: -0.02em; }
 
     /* ── Per-archetype visual fingerprints (set via data-archetype on root div) ── */
     [data-archetype="marketplace"] { --sb-radius: 0.625rem; --sb-card-shadow: 0 2px 8px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06); }
@@ -225,7 +383,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-dark-card {
       background: var(--sb-surface-elevated, #1e293b);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 0.75rem; padding: 1.25rem;
+      border-radius: 0.75rem; padding: 1.5rem;
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     .sb-dark-input {
@@ -270,20 +428,20 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
       border-left: 3px solid var(--sb-primary);
       background: var(--sb-surface, #ffffff);
       border-radius: 0 var(--sb-radius, 0.75rem) var(--sb-radius, 0.75rem) 0;
-      padding: 1rem 1.25rem;
+      padding: 1.25rem 1.5rem;
     }
 
     /* ── Colored icon container ── */
     .sb-icon-box {
       display: flex; align-items: center; justify-content: center;
-      width: 40px; height: 40px; min-width: 40px;
-      border-radius: 0.625rem;
+      width: 48px; height: 48px; min-width: 48px;
+      border-radius: 0.75rem;
       background: var(--sb-primary-bg, rgba(99,102,241,0.08));
     }
     .sb-icon-box-gradient {
       display: flex; align-items: center; justify-content: center;
-      width: 40px; height: 40px; min-width: 40px;
-      border-radius: 0.625rem;
+      width: 48px; height: 48px; min-width: 48px;
+      border-radius: 0.75rem;
       background: linear-gradient(135deg, var(--sb-primary), var(--sb-secondary));
       color: white;
     }
@@ -346,15 +504,15 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     /* ── Design system: cards ── */
     .sb-card {
       background: var(--sb-surface, #ffffff); border: 1px solid rgba(0,0,0,0.1);
-      border-radius: var(--sb-radius, 0.75rem); padding: 1.25rem;
+      border-radius: var(--sb-radius, 0.75rem); padding: 1.5rem;
       box-shadow: var(--sb-card-shadow, 0 1px 3px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06));
       transition: box-shadow 150ms ease, transform 150ms ease;
     }
     .sb-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06); }
     .sb-stat {
-      display: flex; flex-direction: column; gap: 0.25rem;
+      display: flex; flex-direction: column; gap: 0.375rem;
       background: var(--sb-surface, #ffffff); border: 1px solid rgba(0,0,0,0.1);
-      border-radius: var(--sb-radius, 0.75rem); padding: 1.25rem;
+      border-radius: var(--sb-radius, 0.75rem); padding: 1.5rem;
       box-shadow: var(--sb-card-shadow, 0 1px 3px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06));
       transition: box-shadow 150ms ease, transform 150ms ease;
     }
@@ -378,7 +536,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-nav {
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; justify-content: space-between;
-      height: 3.5rem; padding: 0 1.25rem;
+      height: 4rem; padding: 0 1.5rem;
       background: rgba(255,255,255,0.96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(0,0,0,0.1);
       box-shadow: 0 1px 3px rgba(0,0,0,0.06);
@@ -386,15 +544,16 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-nav-dark {
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; justify-content: space-between;
-      height: 3.5rem; padding: 0 1.25rem;
+      height: 4rem; padding: 0 1.5rem;
       background: rgba(15,23,42,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .sb-nav-brand { display: flex; align-items: center; gap: 0.625rem; font-weight: 600; font-size: 0.9375rem; color: var(--sb-text, #111); }
-    .sb-nav-tabs { display: flex; gap: 0.25rem; }
+    .sb-nav-brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 600; font-size: 1rem; color: var(--sb-text, #111); }
+    .sb-nav-tabs { display: flex; gap: 0.375rem; }
     .sb-nav-tab {
-      padding: 0.375rem 0.75rem; border-radius: 0.5rem;
-      font-size: 0.8125rem; font-weight: 500; color: rgba(0,0,0,0.45);
+      display: inline-flex; align-items: center; gap: 0.375rem;
+      padding: 0.5rem 1rem; border-radius: 0.625rem;
+      font-size: 0.875rem; font-weight: 500; color: rgba(0,0,0,0.45);
       cursor: pointer; transition: all 0.15s; border: none; background: none;
     }
     .sb-nav-tab:hover { color: rgba(0,0,0,0.7); background: rgba(0,0,0,0.04); }
@@ -404,22 +563,22 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-nav-centered {
       position: sticky; top: 0; z-index: 50;
       display: flex; flex-direction: column; align-items: center;
-      padding: 0.75rem 1.25rem 0;
+      padding: 1rem 1.5rem 0;
       background: rgba(255,255,255,0.96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(0,0,0,0.1);
       box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
-    .sb-nav-centered .sb-nav-brand { margin-bottom: 0.5rem; }
-    .sb-nav-centered .sb-nav-tabs { margin-bottom: 0.5rem; }
+    .sb-nav-centered .sb-nav-brand { margin-bottom: 0.625rem; }
+    .sb-nav-centered .sb-nav-tabs { margin-bottom: 0.625rem; }
     .sb-nav-centered-dark {
       position: sticky; top: 0; z-index: 50;
       display: flex; flex-direction: column; align-items: center;
-      padding: 0.75rem 1.25rem 0;
+      padding: 1rem 1.5rem 0;
       background: rgba(15,23,42,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .sb-nav-centered-dark .sb-nav-brand { margin-bottom: 0.5rem; color: #e2e8f0; }
-    .sb-nav-centered-dark .sb-nav-tabs { margin-bottom: 0.5rem; }
+    .sb-nav-centered-dark .sb-nav-brand { margin-bottom: 0.625rem; color: #e2e8f0; }
+    .sb-nav-centered-dark .sb-nav-tabs { margin-bottom: 0.625rem; }
     .sb-nav-centered-dark .sb-nav-tab { color: rgba(255,255,255,0.45); }
     .sb-nav-centered-dark .sb-nav-tab:hover { color: rgba(255,255,255,0.7); }
     .sb-nav-centered-dark .sb-nav-tab.active { color: #fff; background: rgba(255,255,255,0.1); }
@@ -427,7 +586,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-nav-spread {
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; justify-content: space-between;
-      height: 3.5rem; padding: 0 1.25rem;
+      height: 4rem; padding: 0 1.5rem;
       background: rgba(255,255,255,0.96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(0,0,0,0.1);
       box-shadow: 0 1px 3px rgba(0,0,0,0.06);
@@ -436,7 +595,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-nav-spread-dark {
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; justify-content: space-between;
-      height: 3.5rem; padding: 0 1.25rem;
+      height: 4rem; padding: 0 1.5rem;
       background: rgba(15,23,42,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
@@ -448,17 +607,17 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-nav-minimal {
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; justify-content: center;
-      height: 3rem; padding: 0 1.25rem;
+      height: 3.5rem; padding: 0 1.5rem;
       background: transparent; border-bottom: none;
     }
     .sb-nav-minimal .sb-nav-brand { display: none; }
-    .sb-nav-minimal .sb-nav-tabs { gap: 0.125rem; }
+    .sb-nav-minimal .sb-nav-tabs { gap: 0.25rem; }
     .sb-nav-minimal .sb-nav-tab { font-size: 0.875rem; }
 
     /* ── Design system: list items ── */
     .sb-list-item {
-      display: flex; align-items: center; gap: 0.75rem;
-      padding: 0.75rem; border-radius: 0.625rem;
+      display: flex; align-items: center; gap: 0.875rem;
+      padding: 0.875rem 1rem; border-radius: 0.625rem;
       transition: background 0.15s; cursor: pointer;
     }
     .sb-list-item:hover { background: rgba(0,0,0,0.05); }
@@ -521,8 +680,8 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     /* ── Design system: avatar ── */
     .sb-avatar {
       display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; min-width: 32px;
-      border-radius: 9999px; font-size: 0.75rem; font-weight: 600;
+      width: 36px; height: 36px; min-width: 36px;
+      border-radius: 9999px; font-size: 0.8125rem; font-weight: 600;
       background: rgba(0,0,0,0.05); color: rgba(0,0,0,0.6);
     }
 
@@ -596,7 +755,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
       border: 1px solid rgba(0,0,0,0.06);
       border-top: 3px solid var(--sb-primary);
       border-radius: 0 0 var(--sb-radius, 0.75rem) var(--sb-radius, 0.75rem);
-      padding: 1.25rem;
+      padding: 1.5rem;
       transition: box-shadow 150ms ease, transform 150ms ease;
     }
     .sb-feature-card:hover { box-shadow: 0 4px 6px rgba(0,0,0,0.07); transform: translateY(-2px); }
@@ -683,7 +842,14 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
       animation: shimmer 2s infinite; background-size: 200% 100%;
     }
     @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-    .sb-image-card-body { padding: 0.875rem; }
+    .sb-image-card-body { padding: 1rem 1.25rem; }
+
+    /* ── Real image support inside image cards ── */
+    .sb-image-card-img img {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; z-index: 1;
+    }
+    .sb-image-card-img.has-img::after { display: none; }
 
     /* ── Price display ── */
     .sb-price { font-weight: 700; font-size: 1.125rem; color: var(--sb-text, #111); letter-spacing: -0.01em; }
@@ -710,8 +876,8 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     /* ── Step dots (learning path) ── */
     .sb-step-dot {
       display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; min-width: 32px;
-      border-radius: 50%; font-size: 0.75rem; font-weight: 700;
+      width: 36px; height: 36px; min-width: 36px;
+      border-radius: 50%; font-size: 0.8125rem; font-weight: 700;
       background: var(--sb-primary); color: white;
       transition: all 150ms ease;
     }
@@ -730,7 +896,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     /* ── Gradient card (full gradient bg) ── */
     .sb-gradient-card {
       background: linear-gradient(135deg, var(--sb-primary), var(--sb-secondary));
-      color: white; border-radius: var(--sb-radius, 0.75rem); padding: 1.25rem;
+      color: white; border-radius: var(--sb-radius, 0.75rem); padding: 1.5rem;
       box-shadow: 0 4px 14px var(--sb-primary-glow);
       transition: all 150ms ease;
     }
@@ -757,8 +923,8 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
 
     /* ── Kanban column ── */
     .sb-kanban-col {
-      min-width: 240px; background: rgba(0,0,0,0.02); border-radius: var(--sb-radius, 0.75rem);
-      padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;
+      min-width: 260px; background: rgba(0,0,0,0.02); border-radius: var(--sb-radius, 0.75rem);
+      padding: 1rem; display: flex; flex-direction: column; gap: 0.625rem;
     }
     .sb-kanban-col-header {
       font-size: 0.8125rem; font-weight: 600; padding: 0.375rem 0.5rem;
@@ -769,7 +935,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     /* ── Bottom action bar ── */
     .sb-bottom-bar {
       position: sticky; bottom: 0; left: 0; right: 0; z-index: 40;
-      padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.875rem 1.5rem; display: flex; align-items: center; gap: 1rem;
       background: var(--sb-surface, rgba(255,255,255,0.95));
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border-top: 1px solid rgba(0,0,0,0.06);
@@ -854,201 +1020,7 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     .sb-press { transition: transform 100ms ease; cursor: pointer; }
     .sb-press:active { transform: scale(0.97); }
 
-    /* ── SAFETY NET: Native form element defaults ── */
-    /* Ensures ALL form elements look polished even without explicit sb-*/glass-* classes */
-
-    input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="range"]):not(.glass-input):not(.sb-dark-input) {
-      width: 100%;
-      background: var(--sb-surface-elevated, #f9fafb);
-      border: 1px solid rgba(0,0,0,0.1);
-      border-radius: 0.625rem;
-      color: var(--sb-text, #111);
-      padding: 0.625rem 0.875rem;
-      font-family: inherit;
-      font-size: 0.875rem;
-      line-height: 1.5;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
-      box-sizing: border-box;
-    }
-    input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="range"]):not(.glass-input):not(.sb-dark-input):focus {
-      border-color: var(--sb-primary, #6366f1);
-      box-shadow: 0 0 0 3px var(--sb-primary-glow, rgba(99,102,241,0.15));
-    }
-    input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([type="range"]):not(.glass-input):not(.sb-dark-input)::placeholder {
-      color: rgba(0,0,0,0.35);
-    }
-
-    textarea:not(.glass-input):not(.sb-dark-input) {
-      width: 100%;
-      background: var(--sb-surface-elevated, #f9fafb);
-      border: 1px solid rgba(0,0,0,0.1);
-      border-radius: 0.625rem;
-      color: var(--sb-text, #111);
-      padding: 0.625rem 0.875rem;
-      font-family: inherit;
-      font-size: 0.875rem;
-      line-height: 1.5;
-      min-height: 100px;
-      resize: vertical;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
-      box-sizing: border-box;
-    }
-    textarea:not(.glass-input):not(.sb-dark-input):focus {
-      border-color: var(--sb-primary, #6366f1);
-      box-shadow: 0 0 0 3px var(--sb-primary-glow, rgba(99,102,241,0.15));
-    }
-    textarea:not(.glass-input):not(.sb-dark-input)::placeholder {
-      color: rgba(0,0,0,0.35);
-    }
-
-    select {
-      width: 100%;
-      appearance: none;
-      -webkit-appearance: none;
-      background: var(--sb-surface-elevated, #f9fafb) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center;
-      background-size: 12px;
-      border: 1px solid rgba(0,0,0,0.1);
-      border-radius: 0.625rem;
-      color: var(--sb-text, #111);
-      padding: 0.625rem 2.5rem 0.625rem 0.875rem;
-      font-family: inherit;
-      font-size: 0.875rem;
-      line-height: 1.5;
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
-      box-sizing: border-box;
-    }
-    select:focus {
-      border-color: var(--sb-primary, #6366f1);
-      box-shadow: 0 0 0 3px var(--sb-primary-glow, rgba(99,102,241,0.15));
-    }
-
-    input[type="radio"] {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 18px; height: 18px; min-width: 18px;
-      border: 2px solid rgba(0,0,0,0.2);
-      border-radius: 50%;
-      cursor: pointer;
-      transition: all 0.15s;
-      position: relative;
-      vertical-align: middle;
-      margin: 0;
-    }
-    input[type="radio"]:checked {
-      border-color: var(--sb-primary, #6366f1);
-      background: var(--sb-primary, #6366f1);
-      box-shadow: inset 0 0 0 3px #fff;
-    }
-    input[type="radio"]:focus {
-      outline: none;
-      box-shadow: 0 0 0 3px var(--sb-primary-glow, rgba(99,102,241,0.15));
-    }
-
-    input[type="checkbox"] {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 18px; height: 18px; min-width: 18px;
-      border: 2px solid rgba(0,0,0,0.2);
-      border-radius: 0.25rem;
-      cursor: pointer;
-      transition: all 0.15s;
-      position: relative;
-      vertical-align: middle;
-      margin: 0;
-    }
-    input[type="checkbox"]:checked {
-      background: var(--sb-primary, #6366f1);
-      border-color: var(--sb-primary, #6366f1);
-    }
-    input[type="checkbox"]:checked::after {
-      content: '';
-      position: absolute;
-      left: 4px; top: 1px;
-      width: 6px; height: 10px;
-      border: solid white;
-      border-width: 0 2px 2px 0;
-      transform: rotate(45deg);
-    }
-    input[type="checkbox"]:focus {
-      outline: none;
-      box-shadow: 0 0 0 3px var(--sb-primary-glow, rgba(99,102,241,0.15));
-    }
-
-    input[type="range"] {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 100%; height: 6px;
-      background: rgba(0,0,0,0.08);
-      border-radius: 9999px;
-      outline: none;
-      border: none;
-      padding: 0;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      background: var(--sb-primary, #6366f1);
-      cursor: pointer;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-
-    label {
-      font-size: 0.8125rem;
-      font-weight: 500;
-      color: var(--sb-text-secondary, rgba(0,0,0,0.7));
-      cursor: pointer;
-    }
-
-    /* Dark theme safety net — activated when root has dark bg classes */
-    .dark input:not(.glass-input):not(.sb-dark-input):not([type="radio"]):not([type="checkbox"]):not([type="range"]),
-    .dark textarea:not(.glass-input):not(.sb-dark-input),
-    .dark select {
-      background: rgba(255,255,255,0.05);
-      color: #e2e8f0;
-      border-color: rgba(255,255,255,0.1);
-    }
-    .dark input:not(.glass-input):not(.sb-dark-input):not([type="radio"]):not([type="checkbox"]):not([type="range"])::placeholder,
-    .dark textarea:not(.glass-input):not(.sb-dark-input)::placeholder {
-      color: rgba(255,255,255,0.35);
-    }
-    .dark input[type="radio"]:checked { box-shadow: inset 0 0 0 3px #0f172a; }
-    .dark input[type="checkbox"]:checked::after { border-color: white; }
-    .dark label { color: #94a3b8; }
-    .dark select { background-color: rgba(255,255,255,0.05); color: #e2e8f0; border-color: rgba(255,255,255,0.1); }
-
-    /* ── Button safety net — make ALL buttons look decent even without Tailwind classes ── */
-    button:not([class*="glass-btn"]):not([class*="bg-"]):not([class*="btn"]):not([class*="rounded"]) {
-      padding: 0.5rem 1rem;
-      border-radius: 0.625rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      border: 1px solid #e5e7eb;
-      background: #f9fafb;
-      color: #374151;
-    }
-    button:not([class*="glass-btn"]):not([class*="bg-"]):not([class*="btn"]):not([class*="rounded"]):hover {
-      background: #f3f4f6;
-      border-color: #d1d5db;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    }
-    button:not([class*="glass-btn"]):not([class*="bg-"]):not([class*="btn"]):not([class*="rounded"]):active {
-      transform: scale(0.98);
-    }
-    /* Primary-looking buttons (with primary color bg) get white text */
-    button[style*="background"] { color: white; border: none; }
-
-    /* ── Card/container safety net — visible borders and subtle backgrounds ── */
-    div[class*="border"]:not([class*="bg-"]) {
-      background: white;
-    }
+    /* Form elements and buttons are styled by the generated code or sb-* design system classes */
 
     /* ── Scrollbar ── */
     ::-webkit-scrollbar { width: 6px; }
@@ -1057,86 +1029,17 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
 
     ${mobile ? `
-    /* ── Mobile preview: lightweight overrides ── */
-    /* Let Tailwind responsive classes handle layout naturally. */
-    /* Only add safe-area padding, overflow prevention, and touch-friendly sizing. */
-    html {
-      -webkit-text-size-adjust: 100% !important;
-    }
-    html, body {
-      width: 100% !important;
-      max-width: 100% !important;
-      overflow-x: hidden !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    body {
-      -webkit-overflow-scrolling: touch !important;
-    }
-    #root {
-      overflow-x: hidden !important;
-      max-width: 100% !important;
-      width: 100% !important;
-      min-height: 100vh;
-      /* Safe area: space for status bar (48px) and home indicator (34px) */
-      padding-top: 48px !important;
-      padding-bottom: 34px !important;
-    }
-
-    /* === Sidebar collapse (too wide for phone) === */
-    aside, [class*="sidebar"], [class*="Sidebar"] {
-      display: none !important;
-    }
-
-    /* === Grid collapse: only 3+ columns → 2 columns === */
-    [class*="grid-cols-3"], [class*="grid-cols-4"],
-    [class*="grid-cols-5"], [class*="grid-cols-6"],
-    [class*="lg\\:grid-cols-3"], [class*="lg\\:grid-cols-4"] {
-      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    }
-
-    /* === Touch-friendly component sizing === */
-    .sb-nav { padding: 0 16px !important; height: 44px !important; }
-    .sb-nav-tabs { gap: 2px !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; flex-wrap: nowrap !important; }
-    .sb-nav-tab { padding: 6px 12px !important; font-size: 13px !important; white-space: nowrap !important; }
-    button, .glass-btn, [role="button"] { min-height: 44px !important; }
-    input, select, textarea, .glass-input { font-size: 16px !important; min-height: 44px !important; }
-
-    /* === Responsive media === */
-    img, video, canvas { max-width: 100% !important; height: auto !important; }
-
-    /* === Table scroll === */
-    .sb-table { display: block !important; overflow-x: auto !important; }
-
-    /* === Scrollbar hiding (native feel) === */
-    ::-webkit-scrollbar { display: none !important; }
-    * { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+    /* ── Mobile preview: keep overrides minimal to avoid distorting generated layouts ── */
+    html { -webkit-text-size-adjust: 100%; }
     ` : ''}
-
-    /* ── Responsive: fallback for real mobile devices (share page on a phone) ── */
-    @media (max-width: 500px) {
-      html, body { overflow-x: hidden !important; }
-      #root { overflow-x: hidden !important; }
-      aside, [class*="sidebar"], [class*="Sidebar"] { display: none !important; }
-      [class*="grid-cols-3"], [class*="grid-cols-4"],
-      [class*="grid-cols-5"], [class*="grid-cols-6"] {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-      }
-      .sb-nav { padding: 0 16px !important; height: 44px !important; }
-      .sb-nav-tabs { overflow-x: auto !important; flex-wrap: nowrap !important; }
-      .sb-nav-tab { font-size: 13px !important; white-space: nowrap !important; }
-      button, .glass-btn { min-height: 44px !important; }
-      input, select, textarea, .glass-input { font-size: 16px !important; min-height: 44px !important; }
-      img, video, canvas { max-width: 100% !important; height: auto !important; }
-    }
   </style>
 </head>
 <body>
   <div id="root">
-    <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#ffffff">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh">
       <div style="text-align:center;color:rgba(0,0,0,0.4)">
         <div style="width:28px;height:28px;border:2px solid rgba(0,0,0,0.08);border-top-color:var(--sb-primary,#6366f1);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 0.75rem"></div>
-        <div style="font-size:0.8125rem;font-family:Inter,sans-serif">Loading app...</div>
+        <div style="font-size:0.8125rem;font-family:system-ui,sans-serif">Loading app...</div>
       </div>
     </div>
   </div>
@@ -1158,48 +1061,36 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
     };
 
     // Map lucide-react UMD export and create safe icon lookup
-    if (window.LucideReact) {
-      window.lucideReact = window.LucideReact;
-
-      // Create a safe wrapper that returns a fallback for missing icons
-      // instead of undefined (which causes colored squares with nothing inside)
-      var _origLR = window.LucideReact;
-      var _FallbackIcon = function(props) {
-        var size = (props && props.size) || 18;
-        var sw = (props && props.strokeWidth) || 1.5;
-        var color = (props && props.style && props.style.color) || (props && props.color) || 'currentColor';
-        return React.createElement('svg', {
-          width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
-          stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round',
-          style: props && props.style, className: props && props.className
-        },
-          React.createElement('circle', {cx:'12',cy:'12',r:'10'}),
-          React.createElement('circle', {cx:'12',cy:'12',r:'1',fill:color,stroke:'none'})
-        );
-      };
-      // Use Proxy with direct property access (not 'in' operator) for better UMD compat
-      window.LucideReact = new Proxy(_origLR, {
-        get: function(target, prop) {
-          // Direct property access — works with getters, frozen objects, etc.
-          var val = target[prop];
-          if (val !== undefined) return val;
-          // For PascalCase names that don't exist, return fallback component
-          if (typeof prop === 'string' && prop.length > 0 && prop.charCodeAt(0) >= 65 && prop.charCodeAt(0) <= 90) {
-            return _FallbackIcon;
-          }
-          return val;
-        },
-        has: function(target, prop) {
-          // Make 'in' operator return true for PascalCase icon names
-          if (prop in target) return true;
-          if (typeof prop === 'string' && prop.length > 0 && prop.charCodeAt(0) >= 65 && prop.charCodeAt(0) <= 90) return true;
-          return false;
+    var _FallbackIcon = function(props) {
+      var size = (props && props.size) || 18;
+      var sw = (props && props.strokeWidth) || 1.5;
+      var color = (props && props.style && props.style.color) || (props && props.color) || 'currentColor';
+      return React.createElement('svg', {
+        width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
+        stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round',
+        style: props && props.style, className: props && props.className
+      },
+        React.createElement('circle', {cx:'12',cy:'12',r:'10'}),
+        React.createElement('circle', {cx:'12',cy:'12',r:'1',fill:color,stroke:'none'})
+      );
+    };
+    var _origLR = window.LucideReact || window.lucideReact || {};
+    window.LucideReact = new Proxy(_origLR, {
+      get: function(target, prop) {
+        var val = target[prop];
+        if (val !== undefined) return val;
+        if (typeof prop === 'string' && prop.length > 0 && prop.charCodeAt(0) >= 65 && prop.charCodeAt(0) <= 90) {
+          return _FallbackIcon;
         }
-      });
-
-      // Debug: log a sample icon to verify UMD loaded correctly
-      console.log('[StartBox] LucideReact loaded, sample icons:', typeof _origLR.Search, typeof _origLR.Star, typeof _origLR.Mic);
-    }
+        return val;
+      },
+      has: function(target, prop) {
+        if (prop in target) return true;
+        if (typeof prop === 'string' && prop.length > 0 && prop.charCodeAt(0) >= 65 && prop.charCodeAt(0) <= 90) return true;
+        return false;
+      }
+    });
+    window.lucideReact = window.LucideReact;
 
     // Global error handler — only replaces DOM for pre-render crashes
     window.__sbRenderComplete = false;
@@ -1220,20 +1111,36 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
   </script>
 
   <script>
+    // Clear stale state from previous generations so new apps start fresh
+    try { localStorage.clear(); } catch(e) {}
+
+    // StartBox global reactive store — completely hook-free, safe to call ANYWHERE
+    var __sbStore = {};
+    window.__sbForceUpdate = null;
+  </script>
+
+  <script>
     // StartBox SDK — pre-loaded helpers for generated apps
     window.__sb = {
       useStore: function(key, defaultValue) {
-        var _a = React.useState(function() {
-          try { var s = localStorage.getItem(key); return s ? JSON.parse(s) : defaultValue; } catch(e) { return defaultValue; }
-        }), val = _a[0], setVal = _a[1];
-        var update = React.useCallback(function(v) {
-          setVal(function(prev) {
-            var next = typeof v === 'function' ? v(prev) : v;
-            try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
-            return next;
-          });
-        }, [key]);
-        return [val, update];
+        // Read from global store, init from localStorage on first access
+        if (!(key in __sbStore)) {
+          try { var s = localStorage.getItem(key); __sbStore[key] = s !== null ? JSON.parse(s) : defaultValue; }
+          catch(e) { __sbStore[key] = defaultValue; }
+        }
+        var val = __sbStore[key];
+        var setter = function(v) {
+          var next = typeof v === 'function' ? v(__sbStore[key]) : v;
+          __sbStore[key] = next;
+          try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+          // Trigger React re-render via the ForceUpdate wrapper
+          if (window.__sbForceUpdate) window.__sbForceUpdate();
+        };
+        var result = [val, setter];
+        result.get = function() { return __sbStore[key]; };
+        result.set = setter;
+        result.value = val;
+        return result;
       },
       copy: async function(text) {
         try { await navigator.clipboard.writeText(text); window.__sb.toast('Copied!', 'success'); return true; } catch(e) { return false; }
@@ -1273,7 +1180,24 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
         }
         return r.join(' ');
       },
+      // Image helper — real images via picsum.photos (seed-based, deterministic)
+      img: function(keyword, width, height) {
+        var w = width || 400;
+        var h = height || 300;
+        var seed = String(keyword || 'placeholder').toLowerCase().replace(/[^a-z0-9]/g, '-');
+        return 'https://picsum.photos/seed/' + seed + '/' + w + '/' + h;
+      },
     };
+
+    // Compatibility aliases: many generated apps call these helpers directly.
+    window.useStore = window.__sb.useStore;
+    window.toast = window.__sb.toast;
+    window.fmt = window.__sb.fmt;
+    window.color = window.__sb.color;
+    window.copy = window.__sb.copy;
+    window.cn = window.__sb.cn;
+    window.sbAI = window.__sbAI;
+    window.img = window.__sb.img;
   </script>
 
   <script>
@@ -1306,23 +1230,43 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
   </script>
 
   <script>
-    // Auto-wrap ReactDOM.createRoot render with ErrorBoundary for crash protection
-    // This transparently intercepts render calls so generated code doesn't need to know about it
+    // Auto-wrap ReactDOM.createRoot render with ErrorBoundary + ForceUpdate for crash protection
+    // and global store reactivity. Generated code doesn't need to know about any of this.
+    // Guarded: skip if React/ReactDOM CDN failed to load.
+    if (!window.__sbCdnFailed && typeof ReactDOM !== 'undefined' && ReactDOM.createRoot) {
     (function() {
+      // ForceUpdate wrapper — re-renders the tree when __sbStore changes
+      function SBStoreProvider(props) {
+        var _a = React.useState(0), setTick = _a[1];
+        React.useEffect(function() {
+          window.__sbForceUpdate = function() { setTick(function(t) { return t + 1; }); };
+          return function() { window.__sbForceUpdate = null; };
+        }, []);
+        return props.children;
+      }
+
       var _origCreateRoot = ReactDOM.createRoot;
       ReactDOM.createRoot = function(container) {
         var root = _origCreateRoot.call(ReactDOM, container);
         var _origRender = root.render;
         root.render = function(element) {
           window.__sbRenderComplete = true;
-          return _origRender.call(root, React.createElement(window.__SBErrorBoundary, null, element));
+          return _origRender.call(root,
+            React.createElement(window.__SBErrorBoundary, null,
+              React.createElement(SBStoreProvider, null, element)
+            )
+          );
         };
         return root;
       };
     })();
+    }
   </script>
 
-  <script type="text/babel" data-presets="react,env">
+  <script type="text/babel" data-presets="react,env,typescript">
+    if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+      throw new Error('React/ReactDOM CDN unavailable');
+    }
     ${code}
   </script>
 
@@ -1340,43 +1284,38 @@ function buildIframeHtml(code: string, appId: string, mobile: boolean): string {
         }
       }
     }, 10000);
-  </script>
 
-  <script>
-    // Mobile responsive fix — only for explicit mobile preview, minimal intervention
-    (function() {
-      var isMobilePreview = ${mobile ? 'true' : 'false'};
-      if (!isMobilePreview) return; // Only run for mobile preview mode
-
-      var cw = document.documentElement.clientWidth || 375;
-
-      function fixOverflow() {
-        // Only fix elements that actually overflow the viewport
-        var els = document.querySelectorAll('div, section, main, article, aside, header, footer, form, nav');
-        for (var i = 0; i < els.length; i++) {
-          var el = els[i];
-          if (el.getBoundingClientRect().width > cw + 2) {
-            el.style.setProperty('max-width', '100%', 'important');
-            el.style.setProperty('overflow-x', 'hidden', 'important');
-          }
-        }
-        // Scale down grids with 3+ columns on mobile
-        var grids = document.querySelectorAll('[class*="grid-cols-3"], [class*="grid-cols-4"], [class*="lg:grid-cols"]');
-        for (var j = 0; j < grids.length; j++) {
-          var cs = window.getComputedStyle(grids[j]);
-          if (cs.display === 'grid') {
-            var cols = (cs.gridTemplateColumns || '').split(/\\s+/).filter(Boolean);
-            if (cols.length >= 3) {
-              grids[j].style.setProperty('grid-template-columns', 'repeat(2, minmax(0, 1fr))', 'important');
-            }
-          }
-        }
+    function __sbTailwindUtilitiesReady() {
+      try {
+        var probe = document.createElement('div');
+        probe.className = 'hidden bg-red-500';
+        document.body.appendChild(probe);
+        var cs = window.getComputedStyle(probe);
+        var bg = cs && cs.backgroundColor ? cs.backgroundColor : '';
+        var display = cs && cs.display ? cs.display : '';
+        document.body.removeChild(probe);
+        var hasBg = bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+        var hasHidden = display === 'none';
+        return hasBg && hasHidden;
+      } catch (e) {
+        return false;
       }
+    }
 
-      setTimeout(fixOverflow, 300);
-      setTimeout(fixOverflow, 1500);
-    })();
+    // Tailwind runtime health check — warn only when utility classes are not active.
+    setTimeout(function() {
+      if (!__sbTailwindUtilitiesReady()) {
+        console.warn('[StartBox Preview] Tailwind utility classes inactive; using utility fallback CSS only.');
+        if (typeof window.__sbLoadTailwindCdn === 'function' && !window.__sbTailwindRetriedCdn) {
+          window.__sbTailwindRetriedCdn = true;
+          window.__sbLoadTailwindCdn();
+        }
+      } else {
+        console.log('[StartBox Preview] Tailwind utilities active via:', window.__sbTailwindSource || 'unknown');
+      }
+    }, 2200);
   </script>
+
 </body>
 </html>`;
 }
@@ -1396,7 +1335,6 @@ export function AppPreview({ code, appId, height = '100%', mobile = false }: App
         height,
         border: 'none',
         display: 'block',
-        background: '#ffffff',
       }}
       title="App Preview"
     />

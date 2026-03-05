@@ -21,8 +21,50 @@ export function getDailySpend(): number {
   return todaySpend;
 }
 
+// Model pricing table (per million tokens)
+interface ModelPricing { input: number; output: number; cacheWrite: number; cacheRead: number; }
+const MODEL_PRICING: Record<string, ModelPricing> = {
+  // Claude Sonnet 4
+  "claude-sonnet-4-6":       { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
+  "claude-sonnet-4-5":       { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 },
+  // Claude Opus 4
+  "claude-opus-4-6":         { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 },
+  // Claude Haiku 4
+  "claude-haiku-4-5":        { input: 0.80, output: 4, cacheWrite: 1, cacheRead: 0.08 },
+  "claude-haiku-4-5-20251001": { input: 0.80, output: 4, cacheWrite: 1, cacheRead: 0.08 },
+  // Kimi K2.5 (Moonshot) — approximate pricing
+  "kimi-k2.5":               { input: 0.80, output: 4, cacheWrite: 1, cacheRead: 0.08 },
+};
+
+export function getModelPricing(modelId: string): ModelPricing {
+  // Direct match
+  if (MODEL_PRICING[modelId]) return MODEL_PRICING[modelId];
+  // Prefix match
+  for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
+    if (modelId.startsWith(key)) return pricing;
+  }
+  // Infer from name patterns
+  if (/opus/i.test(modelId)) return MODEL_PRICING["claude-opus-4-6"];
+  if (/haiku/i.test(modelId)) return MODEL_PRICING["claude-haiku-4-5"];
+  if (/kimi/i.test(modelId)) return MODEL_PRICING["kimi-k2.5"];
+  // Default to Sonnet pricing
+  return MODEL_PRICING["claude-sonnet-4-6"];
+}
+
+export function calculateCost(
+  modelId: string,
+  usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number },
+): number {
+  const pricing = getModelPricing(modelId);
+  const cr = usage.cache_read_input_tokens ?? 0;
+  const cw = usage.cache_creation_input_tokens ?? 0;
+  const uc = usage.input_tokens - cr - cw;
+  return (uc * pricing.input + cw * pricing.cacheWrite + cr * pricing.cacheRead + usage.output_tokens * pricing.output) / 1_000_000;
+}
+
 export function getDailyCap(): number {
-  return Number(process.env.STARTBOX_DAILY_SPEND_CAP_USD ?? 3);
+  const cap = Number(process.env.STARTBOX_DAILY_SPEND_CAP_USD);
+  return (!cap || isNaN(cap) || cap <= 0) ? 3 : cap;
 }
 
 export function canSpend(): boolean {

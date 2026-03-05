@@ -62,6 +62,7 @@ interface StudioLayoutProps {
   onShare: () => void;
   shareCopied: boolean;
   headerView: 'dashboard' | 'preview';
+  progressPercent: number;
 }
 
 export function StudioLayout(props: StudioLayoutProps) {
@@ -74,7 +75,7 @@ export function StudioLayout(props: StudioLayoutProps) {
     workbenchMode, onWorkbenchModeChange, isWorking,
     liveCode, generatedApp, previewRefreshTick, currentTipIndex,
     fullApp, activeSection, onSectionChange, onShare, shareCopied,
-    headerView,
+    headerView, progressPercent,
   } = props;
 
   function renderDashboardSection() {
@@ -142,6 +143,7 @@ export function StudioLayout(props: StudioLayoutProps) {
             workbenchMode={workbenchMode}
             onWorkbenchModeChange={onWorkbenchModeChange}
             isWorking={isWorking}
+            progressPercent={progressPercent}
           />
         </div>
       )}
@@ -167,6 +169,7 @@ export function StudioLayout(props: StudioLayoutProps) {
               generating={generating}
               statusMessage={statusMessage}
               currentTipIndex={currentTipIndex}
+              progressPercent={progressPercent}
             />
           </div>
         ) : (
