@@ -1,4 +1,10 @@
+import { createRequire } from "node:module";
 import type { OutputFormat, QualityBreakdown } from "../types/index.js";
+import {
+  extractDomainKeywordsFromPrompt,
+  keywordAppearsInText,
+  normalizeDomainKeywords,
+} from "./domainKeywords.js";
 
 export interface QualityScoreInput {
   code: string;
@@ -25,49 +31,8 @@ function clampScore(score: number): number {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
-const DOMAIN_TOKEN_STOPWORDS = new Set([
-  "a", "an", "and", "app", "application", "are", "as", "at", "be", "build", "built", "can", "create", "created",
-  "do", "for", "from", "get", "give", "has", "have", "help", "i", "in", "into", "is", "it", "its", "just", "like",
-  "make", "me", "need", "of", "on", "or", "our", "please", "really", "service", "should", "similar", "something",
-  "system", "that", "the", "their", "them", "then", "there", "these", "this", "to", "tool", "us", "use", "using",
-  "want", "we", "with", "would", "you", "your", "feature", "features", "platform", "product", "workflow", "dashboard",
-  "ai",
-]);
-
-function sanitizeDomainTerms(terms: string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-
-  for (const term of terms) {
-    const normalized = String(term ?? "")
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!normalized) continue;
-    const compact = normalized.split(/\s+/).slice(0, 3).join(" ");
-    if (compact.length < 3 || compact.length > 32) continue;
-    if (DOMAIN_TOKEN_STOPWORDS.has(compact)) continue;
-    if (!compact.includes(" ") && DOMAIN_TOKEN_STOPWORDS.has(compact)) continue;
-    if (seen.has(compact)) continue;
-
-    seen.add(compact);
-    out.push(compact);
-  }
-
-  return out;
-}
-
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function hasDomainTerm(codeLower: string, term: string): boolean {
-  if (!term.includes(" ")) {
-    const pattern = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
-    return pattern.test(codeLower);
-  }
-  return codeLower.includes(term);
+  return keywordAppearsInText(codeLower, term);
 }
 
 /* ------------------------------------------------------------------ */
@@ -180,12 +145,6 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
 } {
   const code = input.code;
   const codeLower = code.toLowerCase();
-  const promptTokens = new Set(
-    input.prompt
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((t) => t.length > 3 && !DOMAIN_TOKEN_STOPWORDS.has(t)),
-  );
 
   const detected = detectLayout(code);
 
@@ -241,16 +200,15 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
   );
 
   // --- domain_specificity ---
-  const curatedTerms = sanitizeDomainTerms(input.domainKeywords ?? []);
-  const domainTerms: Set<string> = curatedTerms.length > 0
-    ? new Set(curatedTerms)
-    : promptTokens;
+  const curatedTerms = normalizeDomainKeywords(input.domainKeywords ?? [], { max: 15 });
+  const promptTerms = extractDomainKeywordsFromPrompt(input.prompt, { max: 12 });
+  const domainTerms = curatedTerms.length > 0 ? curatedTerms : promptTerms;
 
   let domainMatches = 0;
   for (const term of domainTerms) {
     if (hasDomainTerm(codeLower, term)) domainMatches += 1;
   }
-  const domainRatio = domainTerms.size ? domainMatches / domainTerms.size : 0.5;
+  const domainRatio = domainTerms.length ? domainMatches / domainTerms.length : 0.5;
   const domainScore = clampScore(domainRatio * 100);
 
   // --- navigation_correctness ---
@@ -377,6 +335,7 @@ export function generateRetryFeedback(
   requestedLayout?: string,
   requestedNavType?: string,
   domainKeywords?: string[],
+  prompt?: string,
 ): string {
   const issues: string[] = [];
 
@@ -396,7 +355,7 @@ export function generateRetryFeedback(
   }
 
   if (breakdown.domain_specificity < 60) {
-    const curated = sanitizeDomainTerms(domainKeywords ?? []);
+    const curated = normalizeDomainKeywords(domainKeywords ?? [], { max: 15 });
     if (curated.length > 0) {
       const codeLower = code.toLowerCase();
       const missing = curated.filter((term) => !hasDomainTerm(codeLower, term)).slice(0, 10);
@@ -437,6 +396,18 @@ export function generateRetryFeedback(
       '  d) Animations or transitions for polish\n' +
       '  e) Clear heading size hierarchy for visual structure\n' +
       '  f) Depth effects like shadows or backdrop-blur where appropriate'
+    );
+  }
+
+  if (hasOverSegmentedSingleMetricRing(code, prompt)) {
+    issues.push(
+      "Progress ring is over-segmented for a single headline metric. Keep one primary arc and one neutral track."
+    );
+  }
+
+  if (hasConcentricMacroCalorieRingClutter(code, prompt)) {
+    issues.push(
+      "Do not stack calorie and macro metrics into concentric multi-color rings. Use one calorie ring plus separate macro bars/cards."
     );
   }
 
@@ -503,7 +474,300 @@ const FACTORY_WEIGHTS = {
   performance: 0.20,
 };
 
-export function scoreFactoryDimensions(code: string): FactoryScoreDimensions {
+const require = createRequire(import.meta.url);
+type TypeScriptModule = {
+  transpileModule: (input: string, options: Record<string, unknown>) => { diagnostics?: Array<Record<string, unknown>> };
+  flattenDiagnosticMessageText?: (msg: unknown, newline: string) => string;
+  JsxEmit: { React: number };
+  ModuleKind: { ESNext: number };
+  ScriptTarget: { ES2020: number };
+  DiagnosticCategory: { Error: number };
+};
+
+let cachedTypeScript: TypeScriptModule | null | undefined;
+
+function getTypeScriptModule(): TypeScriptModule | null {
+  if (cachedTypeScript !== undefined) return cachedTypeScript;
+  try {
+    cachedTypeScript = require("typescript") as TypeScriptModule;
+    return cachedTypeScript;
+  } catch {
+    cachedTypeScript = null;
+    return null;
+  }
+}
+
+function detectCompileSyntaxErrors(code: string): string[] {
+  const ts = getTypeScriptModule();
+  if (!ts) return [];
+
+  try {
+    const result = ts.transpileModule(code, {
+      fileName: "generated.tsx",
+      reportDiagnostics: true,
+      compilerOptions: {
+        jsx: ts.JsxEmit.React,
+        target: ts.ScriptTarget.ES2020,
+        module: ts.ModuleKind.ESNext,
+      },
+    });
+
+    const diagnostics = result.diagnostics ?? [];
+    const errors = diagnostics
+      .filter((d) => d.category === ts.DiagnosticCategory.Error)
+      .slice(0, 3)
+      .map((d) => {
+        const msg = d.messageText;
+        if (typeof msg === "string") return msg;
+        if (ts.flattenDiagnosticMessageText) return ts.flattenDiagnosticMessageText(msg, "\n");
+        return String(msg);
+      })
+      .filter(Boolean);
+
+    return errors;
+  } catch (e) {
+    return [e instanceof Error ? e.message : String(e)];
+  }
+}
+
+function hasSurfacedInvalidNumbers(code: string): boolean {
+  const withoutIsNaN = code.replace(/\bisNaN\s*\(/g, "(");
+  const hasInvalidToken = /\b(?:NaN|Infinity)\b/.test(withoutIsNaN);
+  if (!hasInvalidToken) return false;
+
+  return (
+    />[^<]*(?:NaN|Infinity)[^<]*</.test(withoutIsNaN) ||
+    /(?:NaN|Infinity)\s*(?:%|kcal|cal|g|kg|remaining|left|of)\b/i.test(withoutIsNaN) ||
+    /\b(?:NaN|Infinity)\b/.test(withoutIsNaN)
+  );
+}
+
+function hasOverlappingSvgCenterText(code: string): boolean {
+  const textTags = [...code.matchAll(/<text\b[^>]*>/gi)].map((m) => m[0]);
+  if (textTags.length < 2) return false;
+
+  let centeredCount = 0;
+  for (const tag of textTags) {
+    const xCentered = /x\s*=\s*(?:["']50%?["']|\{\s*["']?50%?["']?\s*\})/i.test(tag);
+    const yCentered = /y\s*=\s*(?:["']50%?["']|\{\s*["']?50%?["']?\s*\})/i.test(tag);
+    if (xCentered && yCentered) centeredCount += 1;
+    if (centeredCount >= 2) return true;
+  }
+
+  return false;
+}
+
+function hasLightThemeWhiteTextCollision(code: string): boolean {
+  const LIGHT_BG = /^(?:bg-(?:white|gray-(?:50|100|200)|slate-(?:50|100|200)|zinc-(?:50|100|200)|neutral-(?:50|100|200)))$/;
+  const DARK_BG = /^(?:bg-(?:black|gray-(?:800|900|950)|slate-(?:800|900|950)|zinc-(?:800|900|950)|neutral-(?:800|900|950)))$/;
+
+  const classLists: string[] = [];
+  for (const m of code.matchAll(/className=(["'])([^"']*)\1/g)) {
+    classLists.push(m[2] ?? "");
+  }
+  for (const m of code.matchAll(/className=\{`([^`]*)`\}/g)) {
+    const list = m[1] ?? "";
+    if (!list.includes("${")) classLists.push(list);
+  }
+  if (classLists.length === 0) return false;
+
+  const isMeaningfulBgToken = (token: string): boolean => {
+    if (!token.startsWith("bg-")) return false;
+    if (
+      /^bg-(?:opacity-\d+|clip-\w+|fixed|local|scroll|center|left|right|top|bottom|no-repeat|repeat(?:-[xy])?|cover|contain|auto)$/.test(token)
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const hasLightRoot = classLists.some((list) => {
+    const tokens = list.split(/\s+/).filter(Boolean);
+    const hasScreenHeight = tokens.includes("min-h-screen") || tokens.includes("h-screen");
+    const hasLightBg = tokens.some((token) => LIGHT_BG.test(token));
+    return hasScreenHeight && hasLightBg;
+  });
+
+  const hasDarkScaffold = classLists.some((list) => {
+    const tokens = list.split(/\s+/).filter(Boolean);
+    return tokens.some((token) => DARK_BG.test(token));
+  });
+
+  const inferredLightTheme = hasLightRoot && !hasDarkScaffold;
+
+  for (const classList of classLists) {
+    const tokens = classList.split(/\s+/).filter(Boolean);
+    const hasTextWhite = tokens.some((token) => /^text-white(?:\/\d+)?$/.test(token));
+    if (!hasTextWhite) continue;
+
+    const hasLightBg = tokens.some((token) => LIGHT_BG.test(token));
+    const hasDarkOrAccentBg = tokens.some(
+      (token) => isMeaningfulBgToken(token) && !LIGHT_BG.test(token) && token !== "bg-transparent",
+    );
+
+    if (hasLightBg) return true;
+    if (inferredLightTheme && !hasDarkOrAccentBg) return true;
+  }
+
+  return false;
+}
+
+function hasMobileLockedLayout(code: string, prompt?: string): boolean {
+  const promptLower = (prompt ?? "").toLowerCase();
+  const mobileRequested = /\b(mobile|phone|iphone|android|watch)\b/.test(promptLower);
+  const desktopRequested = /\bdesktop\b/.test(promptLower);
+  if (mobileRequested && !desktopRequested) return false;
+
+  const hasFixedBottomNav = /\bfixed\b[^"']*\bbottom-0\b|\bbottom-0\b[^"']*\bfixed\b|fixed\s+bottom/i.test(code);
+  const hasNarrowShell =
+    /\bmax-w-(?:xs|sm|md)\b[^"']*\bmx-auto\b/i.test(code) ||
+    /\bw-\[(?:3[0-9]{2}|400)px\]/.test(code) ||
+    /\b(?:max|min)-w-\[(?:3[0-9]{2}|400)px\]/.test(code) ||
+    /(?:maxWidth|max-width|width)\s*:\s*['"`]?(?:3[0-9]{2}|400)px/i.test(code);
+  const hasDesktopBreakpoints = /\b(?:md|lg|xl):/.test(code);
+
+  return hasFixedBottomNav && hasNarrowShell && !hasDesktopBreakpoints;
+}
+
+function extractCircleTags(code: string): string[] {
+  const circleTagPattern = /<circle\b[^>]*\/\s*>|<circle\b[^>]*>\s*<\/circle>/gi;
+  return [...code.matchAll(circleTagPattern)].map((m) => m[0] ?? "").filter(Boolean);
+}
+
+function extractSvgBlocks(code: string): Array<{ svg: string; index: number }> {
+  const out: Array<{ svg: string; index: number }> = [];
+  const svgPattern = /<svg\b[\s\S]*?<\/svg>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = svgPattern.exec(code)) !== null) {
+    out.push({ svg: match[0] ?? "", index: match.index ?? 0 });
+  }
+  return out;
+}
+
+function nearbyTextContext(code: string, start: number, length: number, radius = 320): string {
+  const from = Math.max(0, start - radius);
+  const to = Math.min(code.length, start + length + radius);
+  return code.slice(from, to);
+}
+
+function extractTagAttr(tag: string, attr: string): string | null {
+  const re = new RegExp(`${attr}\\s*=\\s*(?:"([^"]+)"|'([^']+)'|\\{([^}]+)\\})`, "i");
+  const match = tag.match(re);
+  if (!match) return null;
+  return (match[1] ?? match[2] ?? match[3] ?? "").trim() || null;
+}
+
+function hasConcentricCircleGeometry(code: string): boolean {
+  const circleTags = extractCircleTags(code);
+  if (circleTags.length < 4) return false;
+
+  const centerCounts = new Map<string, number>();
+  for (const tag of circleTags) {
+    const cx = extractTagAttr(tag, "cx");
+    const cy = extractTagAttr(tag, "cy");
+    if (!cx || !cy) continue;
+    const key = `${cx}|${cy}`;
+    centerCounts.set(key, (centerCounts.get(key) ?? 0) + 1);
+  }
+
+  let maxAtSameCenter = 0;
+  for (const count of centerCounts.values()) {
+    if (count > maxAtSameCenter) maxAtSameCenter = count;
+  }
+  return maxAtSameCenter >= 3;
+}
+
+function hasMappedArcLoop(svg: string): boolean {
+  return /\.map\(\s*\([^)]*\)\s*=>\s*\(\s*<circle\b[\s\S]{0,2200}?\/>\s*\)\s*\)/i.test(svg);
+}
+
+function hasSingleSliceMappedArcLoop(svg: string): boolean {
+  return /\.slice\(\s*0\s*,\s*1\s*\)\s*\.map\(\s*\([^)]*\)\s*=>\s*\(\s*<circle\b[\s\S]{0,2200}?\/>\s*\)\s*\)/i.test(svg);
+}
+
+function extractCircleStrokeColors(code: string): string[] {
+  const colors = new Set<string>();
+  const strokeAttr = /\bstroke\s*=\s*(?:["']([^"']+)["']|\{\s*["']([^"']+)["']\s*\}|\{\s*([A-Za-z_$][\w$.]*)\s*\})/i;
+  for (const tag of extractCircleTags(code)) {
+    const m = tag.match(strokeAttr);
+    if (!m) continue;
+    const literal = (m[1] ?? m[2] ?? "").trim();
+    const expr = (m[3] ?? "").trim();
+    const color = literal || (expr ? `__expr:${expr}` : "");
+    if (color) colors.add(color);
+  }
+  return [...colors];
+}
+
+function isNeutralStrokeColor(color: string): boolean {
+  const c = color.toLowerCase();
+  if (!c || c === "none" || c === "currentcolor") return true;
+  if (/gray|slate|zinc|neutral|muted/.test(c)) return true;
+  if (/^#(?:d|e|f)[0-9a-f]{2,5}$/i.test(c)) return true;
+  if (/rgba?\(\s*(?:0|255)\s*,\s*(?:0|255)\s*,\s*(?:0|255)(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)/.test(c)) return true;
+  return false;
+}
+
+function promptAllowsConcentricRings(prompt?: string): boolean {
+  const p = (prompt ?? "").toLowerCase();
+  return /\b(concentric|multi[-\s]?(ring|arc)|segmented ring|activity rings?|apple watch rings?|radial breakdown|donut breakdown|macro ring)\b/.test(p);
+}
+
+function hasOverSegmentedSingleMetricRing(code: string, prompt?: string): boolean {
+  if (promptAllowsConcentricRings(prompt)) return false;
+
+  const svgs = extractSvgBlocks(code);
+  for (const block of svgs) {
+    const circleTags = extractCircleTags(block.svg);
+    if (circleTags.length < 4) continue;
+    if (!hasConcentricCircleGeometry(block.svg)) continue;
+
+    const strokeColors = extractCircleStrokeColors(block.svg);
+    const arcCircleCount = circleTags.filter((tag) =>
+      /strokeDasharray|stroke-dasharray|strokeDashoffset|stroke-dashoffset|pathLength/i.test(tag),
+    ).length;
+    const nonNeutral = new Set(strokeColors.filter((c) => !isNeutralStrokeColor(c)));
+    const localContext = nearbyTextContext(code, block.index, block.svg.length);
+    const mentionsSingleMetric = /(remaining|calories?|kcal|left today|\bleft\b)/i.test(localContext);
+    if (!mentionsSingleMetric) continue;
+
+    if (nonNeutral.size >= 2 && circleTags.length >= 4) return true;
+    if (arcCircleCount >= 2) return true;
+    if (circleTags.length >= 6) return true;
+  }
+
+  return false;
+}
+
+function hasConcentricMacroCalorieRingClutter(code: string, prompt?: string): boolean {
+  if (promptAllowsConcentricRings(prompt)) return false;
+
+  const svgs = extractSvgBlocks(code);
+  for (const block of svgs) {
+    const circleTags = extractCircleTags(block.svg);
+    if (circleTags.length < 5) continue;
+    if (!hasConcentricCircleGeometry(block.svg)) continue;
+
+    const localContext = nearbyTextContext(code, block.index, block.svg.length);
+    const hasMacroTerms = /(protein|carbs?|fat|macro)/i.test(localContext);
+    const hasCalorieTerms = /(calories?|kcal|remaining|left today)/i.test(localContext);
+    if (!hasMacroTerms || !hasCalorieTerms) continue;
+
+    const arcCircleCount = circleTags.filter((tag) =>
+      /strokeDasharray|stroke-dasharray|strokeDashoffset|stroke-dashoffset|pathLength/i.test(tag),
+    ).length;
+    if (hasMappedArcLoop(block.svg) && !hasSingleSliceMappedArcLoop(block.svg)) return true;
+    if (arcCircleCount < 2) continue;
+
+    const strokeColors = extractCircleStrokeColors(block.svg);
+    const nonNeutral = new Set(strokeColors.filter((c) => !isNeutralStrokeColor(c)));
+    if (nonNeutral.size >= 2 || arcCircleCount >= 2) return true;
+  }
+
+  return false;
+}
+
+export function scoreFactoryDimensions(code: string, prompt?: string): FactoryScoreDimensions {
   const issues: string[] = [];
 
   // ─── CODE QUALITY (30%) ───
@@ -548,6 +812,96 @@ export function scoreFactoryDimensions(code: string): FactoryScoreDimensions {
   if (!/createRoot|ReactDOM\.render/.test(code)) {
     codeScore -= 20;
     issues.push("Missing render call");
+  }
+
+  const compileErrors = detectCompileSyntaxErrors(code);
+  if (compileErrors.length > 0) {
+    codeScore -= 45;
+    issues.push(`FATAL: JSX/TS transpile failure (${compileErrors[0]})`);
+  }
+
+  const hasRootMount = /document\.getElementById\(['"]root['"]\)/.test(code);
+  if (!hasRootMount) {
+    codeScore -= 40;
+    issues.push("FATAL: missing render root mount (document.getElementById('root'))");
+  }
+
+  if (/ReactDOM\.render\s*\(/.test(code)) {
+    codeScore -= 30;
+    issues.push("FATAL: ReactDOM.render misuse detected");
+  }
+
+  if (/[^.\w]createRoot\s*\(/.test(code) && !/ReactDOM\.createRoot\s*\(/.test(code)) {
+    codeScore -= 30;
+    issues.push("FATAL: createRoot used without ReactDOM namespace");
+  }
+
+  if (hasSurfacedInvalidNumbers(code)) {
+    codeScore -= 30;
+    issues.push("FATAL: surfaced NaN/Infinity values detected");
+  }
+
+  if (hasOverlappingSvgCenterText(code)) {
+    codeScore -= 25;
+    issues.push("FATAL: overlapping SVG center text labels detected");
+  }
+
+  if (hasLightThemeWhiteTextCollision(code)) {
+    codeScore -= 25;
+    issues.push("FATAL: light-theme contrast violation (text-white on light surfaces)");
+  }
+
+  if (hasMobileLockedLayout(code, prompt)) {
+    codeScore -= 20;
+    issues.push("FATAL: mobile-locked layout detected without mobile-only request");
+  }
+
+  if (hasOverSegmentedSingleMetricRing(code, prompt)) {
+    codeScore -= 20;
+    issues.push("FATAL: over-segmented ring for single-metric visualization");
+  }
+
+  if (hasConcentricMacroCalorieRingClutter(code, prompt)) {
+    codeScore -= 20;
+    issues.push("FATAL: concentric calorie+macro ring clutter detected");
+  }
+
+  // Detect unresolved JSX refs that are neither defined components nor declared icons.
+  const componentDefs = new Set<string>();
+  for (const m of code.matchAll(/function\s+([A-Z][A-Za-z0-9]*)\s*\(/g)) componentDefs.add(m[1]);
+  for (const m of code.matchAll(/const\s+([A-Z][A-Za-z0-9]*)\s*=\s*(?:\(|function|React\.memo)/g)) componentDefs.add(m[1]);
+
+  const iconDefs = new Set<string>();
+  const iconDecl = code.match(/(?:const|let|var)\s*\{([^}]*)\}\s*=\s*window\.(?:LucideReact|lucideReact)\s*\|\|\s*\{\}\s*;?/);
+  if (iconDecl?.[1]) {
+    for (const item of iconDecl[1].split(",")) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      const alias = trimmed.split(":").map((p) => p.trim());
+      if (alias[0]) iconDefs.add(alias[0]);
+      if (alias[1]) iconDefs.add(alias[1]);
+    }
+  }
+
+  const jsxRefs = new Set<string>();
+  for (const m of code.matchAll(/<([A-Z][A-Za-z0-9]*)\b/g)) jsxRefs.add(m[1]);
+  const unresolvedRefs = [...jsxRefs].filter(
+    (name) =>
+      !componentDefs.has(name) &&
+      !iconDefs.has(name) &&
+      name !== "React" &&
+      name !== "Fragment",
+  );
+  if (unresolvedRefs.length > 0) {
+    codeScore -= 12;
+    issues.push(`WARN: unresolved icon/component refs (${unresolvedRefs.slice(0, 5).join(", ")})`);
+  }
+
+  const hasButtons = /<button\b/.test(code);
+  const hasInteractionHandlers = /onClick=|onChange=|onSubmit=|onKeyDown=|onInput=/.test(code);
+  if (hasButtons && !hasInteractionHandlers) {
+    codeScore -= 35;
+    issues.push("FATAL: empty interaction map — buttons exist without handlers");
   }
 
   // Bonus: useEffect cleanup
