@@ -3,7 +3,7 @@ import { gatherAppContext } from "../../contextResearch.js";
 import { resolveModel } from "../../modelResolver.js";
 import { getUnifiedClient } from "../../unifiedClient.js";
 import { extractReferences } from "../../referenceExtractor.js";
-import { searchForProduct, fetchSiteSummary } from "../../webSearch.js";
+import { searchForProduct, fetchSiteSummary, extractAppCategory, isParkedDomain } from "../../webSearch.js";
 import type { CompetitorVisual } from "../../competitorScraper.js";
 
 /**
@@ -62,8 +62,14 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
           try {
             const siteSummary = await fetchSiteSummary(ref.url);
             if (siteSummary) {
-              console.log(`Site summary for ${ref.url}: ${siteSummary.slice(0, 100)}...`);
-              webSearchContext += `Site summary: ${siteSummary}\n`;
+              if (isParkedDomain(siteSummary)) {
+                console.warn(`[Research] Parked/for-sale domain detected at ${ref.url} — rejecting as reference`);
+                ref.url = ""; // null out so we don't scrape a parking page
+                webSearchContext = ""; // discard poisoned context
+              } else {
+                console.log(`Site summary for ${ref.url}: ${siteSummary.slice(0, 100)}...`);
+                webSearchContext += `Site summary: ${siteSummary}\n`;
+              }
             }
           } catch {
             // non-fatal
@@ -76,13 +82,16 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
         ctx.webSearchContext = webSearchContext;
       }
 
-      // Step 0b: Scrape the reference URL (now using the correct URL from web search)
-      ctx.onProgress?.({ type: "status", message: `Analyzing ${ref.raw}...` });
-      console.log(`Reference detected: "${ref.raw}" → ${ref.url}`);
+      // Step 0b: Scrape the reference URL (skip if parked domain was detected)
+      if (!ref.url) {
+        console.log(`[Research] No valid URL for "${ref.raw}" — skipping scrape`);
+      }
 
       const { scrapeReferenceUrl } = await import("../../competitorScraper.js");
       const apiKey = process.env.KIMI_API_KEY;
-      if (apiKey) {
+      if (apiKey && ref.url) {
+        ctx.onProgress?.({ type: "status", message: `Analyzing ${ref.raw}...` });
+        console.log(`Reference detected: "${ref.raw}" → ${ref.url}`);
         const visionClient = getUnifiedClient();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         referenceVisual = await scrapeReferenceUrl(
@@ -202,19 +211,37 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
     console.log(`Visual agent complete — ${allVisuals.length} total scraped, ${analyzed} visually analyzed`);
   }
 
-  // Step 3: Live search — Figma Community template + 21st.dev components (parallel)
-  // Falls back to built-in library if live search fails.
+  // Step 3: Logic pipeline — extract app category from web search intelligence
+  // This is the key insight: instead of classifying the raw prompt (which has product
+  // names like "Ditto AI" that tell us nothing), we classify the web search RESULTS
+  // which describe what the product actually does (e.g., "dating app").
+  let discoveredCategory: string | null = null;
+  if (webSearchContext) {
+    discoveredCategory = extractAppCategory(webSearchContext);
+    if (discoveredCategory) {
+      console.log(`[Research] Web search intelligence → app category: "${discoveredCategory}"`);
+    }
+  }
+  // Also try site summary from reference visual if web search didn't yield a category
+  if (!discoveredCategory && referenceVisual?.meta_description) {
+    discoveredCategory = extractAppCategory(referenceVisual.meta_description);
+    if (discoveredCategory) {
+      console.log(`[Research] Reference site meta → app category: "${discoveredCategory}"`);
+    }
+  }
+
+  // Step 4: Live search — Webflow/general template + 21st.dev components (parallel)
+  // Now powered by the discovered category from web search intelligence.
   ctx.onProgress?.({ type: "status", message: "Sourcing design templates..." });
 
-  const { buildFigmaSearchQuery, searchFigmaCommunity } = await import("../../figmaCommunitySearch.js");
-  const { build21stDevSearchQuery, search21stDev } = await import("../../twentyFirstDevSearch.js");
+  const { searchWebflowTemplates } = await import("../../webflowTemplateSearch.js");
+  const { build21stDevSearchQueries, search21stDevMulti } = await import("../../twentyFirstDevSearch.js");
 
-  const figmaQuery = buildFigmaSearchQuery(ctx.prompt);
-  const componentQuery = build21stDevSearchQuery(ctx.prompt);
+  const componentQueries = build21stDevSearchQueries(ctx.prompt, discoveredCategory);
 
   // Run both searches in parallel (both are fail-safe)
   const [figmaResult, components21st] = await Promise.all([
-    // Figma: use explicit key if provided, otherwise search community
+    // Template search: use explicit cached key if provided, otherwise search Webflow/general
     ctx.figmaTemplateKey
       ? (async () => {
           try {
@@ -222,16 +249,16 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
             const overlay = await getTemplateAsContext(ctx.figmaTemplateKey!);
             if (overlay) return { contextOverlay: overlay, source: `cached: ${ctx.figmaTemplateKey}` };
           } catch (e) {
-            console.warn("[Figma] Cached template lookup failed:", e);
+            console.warn("[Template] Cached template lookup failed:", e);
           }
           return null;
         })()
-      : searchFigmaCommunity(figmaQuery).then(
-          (r) => r ? { contextOverlay: r.contextOverlay, source: `community: ${r.template.file_name}` } : null,
-          (e) => { console.warn("[Figma Search] Error:", e); return null; },
+      : searchWebflowTemplates(ctx.prompt, discoveredCategory).then(
+          (r) => r ? { contextOverlay: r.contextOverlay, source: `webflow: ${r.template.file_name}`, htmlStructure: r.htmlStructure ?? null } : null,
+          (e) => { console.warn("[Webflow Search] Error:", e); return null; },
         ),
-    // 21st.dev component search
-    search21stDev(componentQuery).catch((e) => {
+    // 21st.dev: run multiple queries in parallel and merge
+    search21stDevMulti(componentQueries).catch((e) => {
       console.warn("[21st.dev] Search error:", e);
       return [] as import("../../twentyFirstDevSearch.js").UIComponentResult[];
     }),
@@ -300,6 +327,13 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
   if (components21st.length > 0) {
     ctx.twentyFirstDevComponents = components21st;
     console.log(`[21st.dev] ${components21st.length} components ready for code gen: ${components21st.map(c => c.name).join(", ")}`);
+  }
+
+  // Store template HTML structure for code gen injection
+  const htmlStructure = (figmaResult as { htmlStructure?: string | null })?.htmlStructure;
+  if (htmlStructure) {
+    ctx.templateHtmlStructure = htmlStructure;
+    console.log(`[Template HTML] ${htmlStructure.length} chars of structural HTML ready for code gen`);
   }
 
   return { nextState: "REASONING" };

@@ -27,7 +27,7 @@ export const screenSchema = z.object({
   }),
   input_fields: z.array(inputFieldSchema).min(1).max(6),
   ai_logic: aiLogicSchema,
-  output_format: z.enum(["markdown", "cards", "grid_cards", "score_card", "report", "list", "plain"]),
+  output_format: z.enum(["markdown", "cards", "grid_cards", "score_card", "report", "list", "plain", "dashboard"]),
   output_label: z.string().min(1).max(60),
 });
 
@@ -47,8 +47,8 @@ export const appSpecSchema = z.object({
       label: z.string().min(1).max(30),
       icon: z.string().min(1).max(30),
     })
-  ).min(2).max(4),
-  screens: z.array(screenSchema).min(2).max(4),
+  ).min(2).max(6),
+  screens: z.array(screenSchema).min(2).max(6),
 });
 
 export const generateRequestSchema = z.object({

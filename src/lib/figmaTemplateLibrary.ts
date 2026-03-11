@@ -498,6 +498,325 @@ export const TEMPLATE_LIBRARY: BuiltInTemplate[] = [
       },
     },
   },
+
+  // ── 13. Dating / Romance ──
+  {
+    id: "tpl-dating",
+    name: "Dating App",
+    category: "dating",
+    keywords: [
+      "dating", "match", "swipe", "love", "romance", "singles",
+      "couples", "tinder", "bumble", "hinge", "ditto", "heart",
+      "profile", "connection", "relationship", "meet",
+    ],
+    description: "Swipeable profile cards with match animations, chat, and discovery feed",
+    design_tokens: {
+      colors: {
+        primary: "#e11d48",
+        secondary: "#f43f5e",
+        accent: "#a855f7",
+        background: "#fff1f2",
+        surface: "#ffffff",
+        text: "#1a1a2e",
+        muted: "#71717a",
+        all: ["#e11d48", "#f43f5e", "#a855f7", "#ec4899", "#f97316", "#fff1f2", "#ffe4e6"],
+      },
+      typography: {
+        fonts: ["DM Sans", "system-ui"],
+        heading_sizes: [32, 26, 20, 16],
+        body_size: 15,
+        weights: [400, 500, 600, 700, 800],
+      },
+      spacing: { base: 8, values: [4, 8, 12, 16, 24, 32, 48] },
+      borders: { radii: [12, 16, 24, 9999], default_radius: 16 },
+      shadows: ["0 4px 16px rgba(225,29,72,0.15)", "0 8px 32px rgba(0,0,0,0.1)"],
+      layout: {
+        type: "tab-bar",
+        columns: 2,
+        frame_names: ["Discovery Feed", "Profile Card Stack", "Match Screen", "Chat List", "User Profile", "Settings", "Bottom Tab Bar"],
+        component_names: ["SwipeCard", "ProfileCard", "MatchAnimation", "ChatBubble", "PhotoGrid", "InterestTag", "LikeButton", "SuperLikeButton", "TabBar", "StoryRing"],
+      },
+    },
+  },
+
+  // ── 14. Chat / Messaging ──
+  {
+    id: "tpl-chat",
+    name: "Messaging App",
+    category: "chat",
+    keywords: [
+      "chat", "message", "messaging", "conversation", "dm", "inbox",
+      "whatsapp", "telegram", "slack", "discord", "communicate",
+      "text", "send", "reply", "group", "channel",
+    ],
+    description: "Chat threads with message bubbles, conversation list, and media sharing",
+    design_tokens: {
+      colors: {
+        primary: "#25d366",
+        secondary: "#128c7e",
+        accent: "#34b7f1",
+        background: "#f0f2f5",
+        surface: "#ffffff",
+        text: "#111b21",
+        muted: "#8696a0",
+        all: ["#25d366", "#128c7e", "#34b7f1", "#075e54", "#dcf8c6", "#f0f2f5", "#e9edef"],
+      },
+      typography: {
+        fonts: ["Inter", "system-ui"],
+        heading_sizes: [24, 20, 16, 14],
+        body_size: 15,
+        weights: [400, 500, 600],
+      },
+      spacing: { base: 8, values: [4, 8, 12, 16, 20, 24] },
+      borders: { radii: [8, 12, 18, 9999], default_radius: 12 },
+      shadows: ["0 1px 2px rgba(0,0,0,0.08)", "0 2px 8px rgba(0,0,0,0.06)"],
+      layout: {
+        type: "sidebar",
+        columns: 2,
+        frame_names: ["Conversation List", "Chat Window", "Message Bubble", "Input Bar", "Contact Info", "Media Gallery"],
+        component_names: ["ChatBubble", "ConversationRow", "TypingIndicator", "MessageInput", "AttachButton", "VoiceNote", "Avatar", "OnlineStatus", "ReadReceipt", "GroupAvatar"],
+      },
+    },
+  },
+
+  // ── 15. Scheduling / Calendar ──
+  {
+    id: "tpl-scheduling",
+    name: "Scheduling App",
+    category: "scheduling",
+    keywords: [
+      "schedule", "calendar", "appointment", "booking", "availability",
+      "meeting", "event", "agenda", "planner", "cal", "calendly",
+      "time", "slot", "reservation", "reminder",
+    ],
+    description: "Calendar views with time slot picker, booking flow, and appointment management",
+    design_tokens: {
+      colors: {
+        primary: "#2563eb",
+        secondary: "#7c3aed",
+        accent: "#06b6d4",
+        background: "#f8fafc",
+        surface: "#ffffff",
+        text: "#0f172a",
+        muted: "#64748b",
+        all: ["#2563eb", "#7c3aed", "#06b6d4", "#10b981", "#f59e0b", "#f8fafc", "#e2e8f0"],
+      },
+      typography: {
+        fonts: ["Inter", "system-ui"],
+        heading_sizes: [32, 24, 20, 16],
+        body_size: 14,
+        weights: [400, 500, 600, 700],
+      },
+      spacing: { base: 8, values: [4, 8, 12, 16, 24, 32, 48] },
+      borders: { radii: [6, 8, 12, 16], default_radius: 8 },
+      shadows: ["0 1px 3px rgba(0,0,0,0.08)", "0 4px 12px rgba(0,0,0,0.06)"],
+      layout: {
+        type: "top-nav",
+        columns: 7,
+        frame_names: ["Top Nav", "Calendar Month View", "Week View", "Day Timeline", "Time Slot Picker", "Booking Form", "Confirmation"],
+        component_names: ["CalendarGrid", "DayCell", "TimeSlot", "EventCard", "BookingForm", "DatePicker", "TimePicker", "AvailabilityBar", "AppointmentCard", "ConfirmationModal"],
+      },
+    },
+  },
+
+  // ── 16. Weather ──
+  {
+    id: "tpl-weather",
+    name: "Weather App",
+    category: "weather",
+    keywords: [
+      "weather", "forecast", "temperature", "climate", "rain",
+      "sunny", "cloud", "wind", "storm", "humidity", "uv",
+    ],
+    description: "Current conditions with animated weather icons, hourly/daily forecast, and radar map",
+    design_tokens: {
+      colors: {
+        primary: "#0ea5e9",
+        secondary: "#38bdf8",
+        accent: "#f59e0b",
+        background: "#0c4a6e",
+        surface: "#0369a1",
+        text: "#f0f9ff",
+        muted: "#bae6fd",
+        all: ["#0ea5e9", "#38bdf8", "#f59e0b", "#f97316", "#a855f7", "#0c4a6e", "#0369a1"],
+      },
+      typography: {
+        fonts: ["SF Pro Display", "Inter", "system-ui"],
+        heading_sizes: [64, 36, 24, 16],
+        body_size: 15,
+        weights: [300, 400, 500, 600, 700],
+      },
+      spacing: { base: 8, values: [4, 8, 16, 24, 32, 48] },
+      borders: { radii: [12, 16, 24, 9999], default_radius: 16 },
+      shadows: ["0 4px 16px rgba(0,0,0,0.2)", "0 8px 32px rgba(0,0,0,0.15)"],
+      layout: {
+        type: "top-nav",
+        columns: 2,
+        frame_names: ["Current Weather Hero", "Hourly Forecast Strip", "Daily Forecast List", "Weather Details Grid", "Radar Map", "Air Quality"],
+        component_names: ["WeatherHero", "TempDisplay", "HourlyCard", "DailyRow", "WeatherIcon", "WindCompass", "UVIndex", "SunriseSunset", "PrecipBar", "LocationSearch"],
+      },
+    },
+  },
+
+  // ── 17. News / Blog ──
+  {
+    id: "tpl-news",
+    name: "News Reader",
+    category: "news",
+    keywords: [
+      "news", "blog", "article", "magazine", "media", "journalist",
+      "headline", "newsletter", "press", "editorial", "publish",
+      "read", "stories", "breaking",
+    ],
+    description: "Article feed with featured stories, category tabs, and reading view",
+    design_tokens: {
+      colors: {
+        primary: "#dc2626",
+        secondary: "#1e40af",
+        accent: "#f59e0b",
+        background: "#fafafa",
+        surface: "#ffffff",
+        text: "#171717",
+        muted: "#737373",
+        all: ["#dc2626", "#1e40af", "#f59e0b", "#10b981", "#6366f1", "#fafafa", "#e5e5e5"],
+      },
+      typography: {
+        fonts: ["Georgia", "Inter", "system-ui"],
+        heading_sizes: [36, 28, 22, 18],
+        body_size: 17,
+        weights: [400, 500, 600, 700, 800],
+      },
+      spacing: { base: 8, values: [4, 8, 12, 16, 24, 32, 48, 64] },
+      borders: { radii: [4, 6, 8, 12], default_radius: 6 },
+      shadows: ["0 1px 3px rgba(0,0,0,0.06)", "0 4px 12px rgba(0,0,0,0.08)"],
+      layout: {
+        type: "top-nav",
+        columns: 3,
+        frame_names: ["Top Nav", "Breaking Banner", "Featured Story", "Category Tabs", "Article Grid", "Article Card", "Reading View"],
+        component_names: ["ArticleCard", "FeaturedStory", "CategoryTab", "AuthorByline", "ReadingProgress", "BookmarkButton", "ShareButton", "CommentSection", "RelatedArticles", "SearchBar"],
+      },
+    },
+  },
+
+  // ── 18. Medical / Healthcare ──
+  {
+    id: "tpl-medical",
+    name: "Healthcare App",
+    category: "medical",
+    keywords: [
+      "medical", "healthcare", "doctor", "patient", "hospital",
+      "health", "prescription", "telemedicine", "clinic", "diagnosis",
+      "pharmacy", "appointment", "symptoms", "wellness",
+    ],
+    description: "Patient dashboard with appointment booking, health records, and telemedicine",
+    design_tokens: {
+      colors: {
+        primary: "#0d9488",
+        secondary: "#2563eb",
+        accent: "#f59e0b",
+        background: "#f0fdfa",
+        surface: "#ffffff",
+        text: "#134e4a",
+        muted: "#64748b",
+        all: ["#0d9488", "#2563eb", "#f59e0b", "#ef4444", "#10b981", "#f0fdfa", "#ccfbf1"],
+      },
+      typography: {
+        fonts: ["Inter", "system-ui"],
+        heading_sizes: [32, 24, 20, 16],
+        body_size: 15,
+        weights: [400, 500, 600, 700],
+      },
+      spacing: { base: 8, values: [4, 8, 12, 16, 24, 32, 48] },
+      borders: { radii: [8, 12, 16], default_radius: 12 },
+      shadows: ["0 1px 3px rgba(0,0,0,0.06)", "0 4px 12px rgba(0,0,0,0.08)"],
+      layout: {
+        type: "top-nav",
+        columns: 2,
+        frame_names: ["Top Nav", "Health Summary", "Upcoming Appointments", "Doctor Cards", "Prescription List", "Vitals Chart", "Telemedicine View"],
+        component_names: ["DoctorCard", "AppointmentCard", "VitalsChart", "PrescriptionRow", "SymptomChecker", "HealthScore", "VideoCallUI", "MedicalRecord", "SearchBar", "EmergencyButton"],
+      },
+    },
+  },
+
+  // ── 19. Gaming / Esports ──
+  {
+    id: "tpl-gaming",
+    name: "Gaming Platform",
+    category: "gaming",
+    keywords: [
+      "game", "gaming", "esports", "leaderboard", "score", "player",
+      "tournament", "level", "rank", "achievement", "stream",
+      "competitive", "match", "team", "clan",
+    ],
+    description: "Leaderboard with player stats, tournament brackets, and achievement system",
+    design_tokens: {
+      colors: {
+        primary: "#7c3aed",
+        secondary: "#06b6d4",
+        accent: "#f59e0b",
+        background: "#0f0f23",
+        surface: "#1a1a3e",
+        text: "#e2e8f0",
+        muted: "#94a3b8",
+        all: ["#7c3aed", "#06b6d4", "#f59e0b", "#ef4444", "#10b981", "#ec4899", "#0f0f23", "#1a1a3e"],
+      },
+      typography: {
+        fonts: ["Rajdhani", "Inter", "system-ui"],
+        heading_sizes: [36, 28, 22, 16],
+        body_size: 14,
+        weights: [400, 500, 600, 700, 800],
+      },
+      spacing: { base: 8, values: [4, 8, 12, 16, 24, 32] },
+      borders: { radii: [4, 8, 12], default_radius: 8 },
+      shadows: ["0 0 20px rgba(124,58,237,0.3)", "0 4px 16px rgba(0,0,0,0.4)"],
+      layout: {
+        type: "sidebar",
+        columns: 3,
+        frame_names: ["Sidebar Nav", "Featured Tournament", "Leaderboard", "Player Stats", "Match History", "Achievement Grid"],
+        component_names: ["LeaderboardRow", "PlayerCard", "TournamentBracket", "StatBar", "AchievementBadge", "MatchCard", "RankBadge", "XPProgress", "TeamCard", "LiveIndicator"],
+      },
+    },
+  },
+
+  // ── 20. Portfolio / Landing ──
+  {
+    id: "tpl-portfolio",
+    name: "Portfolio Website",
+    category: "portfolio",
+    keywords: [
+      "portfolio", "resume", "personal", "landing", "showcase",
+      "about", "cv", "freelance", "designer", "developer",
+      "creative", "work", "projects", "hire", "website",
+    ],
+    description: "Hero section with project showcase, skills grid, and contact form",
+    design_tokens: {
+      colors: {
+        primary: "#18181b",
+        secondary: "#6366f1",
+        accent: "#f59e0b",
+        background: "#fafafa",
+        surface: "#ffffff",
+        text: "#09090b",
+        muted: "#71717a",
+        all: ["#18181b", "#6366f1", "#f59e0b", "#10b981", "#ec4899", "#fafafa", "#e4e4e7"],
+      },
+      typography: {
+        fonts: ["DM Serif Display", "Inter", "system-ui"],
+        heading_sizes: [48, 36, 28, 20],
+        body_size: 16,
+        weights: [400, 500, 600, 700],
+      },
+      spacing: { base: 8, values: [4, 8, 16, 24, 32, 48, 64, 96] },
+      borders: { radii: [4, 8, 12, 16], default_radius: 8 },
+      shadows: ["0 1px 3px rgba(0,0,0,0.06)", "0 4px 16px rgba(0,0,0,0.1)", "0 12px 40px rgba(0,0,0,0.12)"],
+      layout: {
+        type: "top-nav",
+        columns: 3,
+        frame_names: ["Navigation", "Hero Section", "About Section", "Project Grid", "Skills Grid", "Testimonials", "Contact Form", "Footer"],
+        component_names: ["HeroSection", "ProjectCard", "SkillBadge", "TestimonialCard", "ContactForm", "SocialLinks", "ScrollReveal", "AnimatedHeading", "ImageGallery", "CTAButton"],
+      },
+    },
+  },
 ];
 
 // ─── Template matcher ────────────────────────────────────────────
@@ -506,9 +825,21 @@ export const TEMPLATE_LIBRARY: BuiltInTemplate[] = [
  * Match a user prompt to the best built-in template.
  * Returns the template with the highest keyword overlap score.
  */
+// Common filler words to ignore during template matching
+const STOP_WORDS = new Set([
+  "make", "me", "a", "an", "the", "build", "create", "generate",
+  "app", "application", "web", "please", "i", "want",
+  "need", "like", "with", "and", "for", "that", "this", "my",
+  "can", "you", "just", "simple", "good", "best", "new", "ai",
+]);
+
 export function matchTemplate(prompt: string): BuiltInTemplate {
   const lower = prompt.toLowerCase();
-  const words = lower.split(/\s+/);
+  // Strip "like [product name]" to avoid matching on filler words
+  const stripped = lower.replace(/like\s+\w+(?:\s+\w+)?(?:\s+ai)?/gi, "").trim();
+  const words = stripped.split(/\s+/).filter((w) => !STOP_WORDS.has(w) && w.length > 1);
+  // Also keep product names from original prompt for matching (e.g. "tinder", "ditto")
+  const allWords = lower.split(/\s+/).filter((w) => !STOP_WORDS.has(w) && w.length > 1);
 
   let bestMatch = TEMPLATE_LIBRARY[0];
   let bestScore = 0;
@@ -516,16 +847,20 @@ export function matchTemplate(prompt: string): BuiltInTemplate {
   for (const template of TEMPLATE_LIBRARY) {
     let score = 0;
     for (const keyword of template.keywords) {
-      // Exact word match (higher weight)
+      // Exact word match in cleaned prompt (highest weight)
       if (words.includes(keyword)) {
         score += 3;
       }
+      // Exact word match including product names from original
+      else if (allWords.includes(keyword)) {
+        score += 3;
+      }
       // Substring match (lower weight)
-      else if (lower.includes(keyword)) {
+      else if (stripped.includes(keyword)) {
         score += 2;
       }
-      // Partial word match (e.g. "shopping" matches "shop")
-      else if (words.some((w) => w.startsWith(keyword) || keyword.startsWith(w))) {
+      // Partial word match — only if keyword is 4+ chars (avoids false positives)
+      else if (keyword.length >= 4 && words.some((w) => w.length >= 4 && (w.startsWith(keyword) || keyword.startsWith(w)))) {
         score += 1;
       }
     }
@@ -535,6 +870,7 @@ export function matchTemplate(prompt: string): BuiltInTemplate {
     }
   }
 
+  console.log(`[Template] Matched "${bestMatch.name}" (score: ${bestScore}) for prompt`);
   return bestMatch;
 }
 

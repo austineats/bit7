@@ -34,6 +34,7 @@ export async function handleGeneration(ctx: PipelineContext): Promise<StateTrans
       ctx.onProgress,
       ctx.contextBrief,
       ctx.twentyFirstDevComponents,
+      ctx.templateHtmlStructure,
     );
 
     if (codeResult) {

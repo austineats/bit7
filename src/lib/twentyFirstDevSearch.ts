@@ -1,8 +1,10 @@
 /**
- * Search 21st.dev for UI components via DuckDuckGo.
+ * Search 21st.dev for UI components via Brave Search.
  * Scrapes component pages for names, descriptions, and implementation hints.
  * Results enhance the code gen system prompt with real-world component patterns.
  */
+
+import { braveSearch } from "./braveSearch.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -21,6 +23,17 @@ const CACHE_TTL = 3_600_000; // 1 hour
 
 // ─── Fetch helpers ──────────────────────────────────────────────
 
+const USER_AGENTS = [
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
+];
+
+function randomUA(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -28,8 +41,8 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
     return await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent": randomUA(),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
       redirect: "follow",
@@ -39,7 +52,7 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
   }
 }
 
-// ─── DuckDuckGo search for 21st.dev ────────────────────────────
+// ─── Brave Search for 21st.dev ──────────────────────────────────
 
 interface SearchHit {
   url: string;
@@ -47,53 +60,57 @@ interface SearchHit {
   snippet: string;
 }
 
-function parseDDGResults(html: string): SearchHit[] {
+/**
+ * Parse Brave Search HTML results for 21st.dev URLs.
+ * Brave structure: <div class="snippet" data-type="web">
+ *   <a href="URL" class="... l1"><div class="title ...">TITLE</div></a>
+ *   <div class="content ...">DESCRIPTION</div>
+ * </div>
+ */
+function parseBraveResults(html: string): SearchHit[] {
   const results: SearchHit[] = [];
-  const linkPattern = /<a[^>]*rel="nofollow"[^>]*href="([^"]+)"[^>]*class='result-link'[^>]*>([\s\S]*?)<\/a>/gi;
-  const snippetPattern = /<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi;
 
-  const links: Array<{ url: string; title: string }> = [];
-  let match;
-  while ((match = linkPattern.exec(html)) !== null) {
-    const url = match[1];
-    const title = match[2].replace(/<[^>]+>/g, "").trim();
-    if (url && title && url.includes("21st.dev")) {
-      links.push({ url, title });
+  // Extract web result snippets from Brave's HTML
+  const snippetPattern = /<div class="snippet\s+svelte-[^"]*"\s+data-pos="\d+"\s+data-type="web"[^>]*>([\s\S]*?)(?=<div class="snippet\s|<\/main>|$)/gi;
+  let snippetMatch;
+
+  while ((snippetMatch = snippetPattern.exec(html)) !== null) {
+    const block = snippetMatch[1];
+
+    // Extract URL from the result link
+    const urlMatch = block.match(/<a href="(https?:\/\/[^"]+)"[^>]*class="[^"]*l1"/);
+    if (!urlMatch) continue;
+    const url = urlMatch[1];
+    if (!url.includes("21st.dev")) continue;
+
+    // Extract title
+    const titleMatch = block.match(/class="title[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    const title = titleMatch
+      ? titleMatch[1].replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/&amp;/g, "&").trim()
+      : "";
+
+    // Extract description
+    const descMatch = block.match(/class="content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    const snippet = descMatch
+      ? descMatch[1].replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/&amp;/g, "&").trim()
+      : "";
+
+    if (url && title) {
+      results.push({ url, title, snippet });
     }
+    if (results.length >= 6) break;
   }
 
-  const snippets: string[] = [];
-  while ((match = snippetPattern.exec(html)) !== null) {
-    snippets.push(
-      match[1]
-        .replace(/<[^>]+>/g, "")
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&#x27;/g, "'")
-        .replace(/&quot;/g, '"')
-        .trim(),
-    );
-  }
-
-  for (let i = 0; i < links.length && i < 6; i++) {
-    results.push({
-      url: links[i].url,
-      title: links[i].title,
-      snippet: snippets[i] ?? "",
-    });
-  }
-
-  // Fallback: simpler anchor matching
+  // Fallback: extract any 21st.dev URLs from the page
   if (results.length === 0) {
-    const simplePattern = /<a[^>]*href="(https?:\/\/[^"]*21st\.dev[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    const urlPattern = /href="(https?:\/\/(?:www\.)?21st\.dev\/[^"]*(?:component|community)[^"]*)"/gi;
     const seen = new Set<string>();
-    while ((match = simplePattern.exec(html)) !== null) {
+    let match;
+    while ((match = urlPattern.exec(html)) !== null) {
       const url = match[1];
-      const title = match[2].replace(/<[^>]+>/g, "").trim();
-      if (url && title && title.length > 3 && !seen.has(url)) {
+      if (!seen.has(url) && !url.includes("opengraph-image")) {
         seen.add(url);
-        results.push({ url, title, snippet: "" });
+        results.push({ url, title: "", snippet: "" });
         if (results.length >= 5) break;
       }
     }
@@ -102,14 +119,82 @@ function parseDDGResults(html: string): SearchHit[] {
   return results;
 }
 
+// ─── Extract real component code from RSC payload ───────────────
+
+/**
+ * Extract CDN source code URL from 21st.dev RSC payload.
+ * Every 21st.dev component stores its source at cdn.21st.dev.
+ * The RSC data includes "code":"https://cdn.21st.dev/..." pointing to the .tsx file.
+ */
+function extractCdnCodeUrl(html: string): string | null {
+  // Search RSC chunks for the CDN code URL
+  const pattern = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+  let match;
+  while ((match = pattern.exec(html)) !== null) {
+    const raw = match[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\\\/g, '\\');
+
+    // Look for "code":"https://cdn.21st.dev/...tsx"
+    const cdnMatch = raw.match(/"code":"(https:\/\/cdn\.21st\.dev\/[^"]+\.tsx)"/);
+    if (cdnMatch) return cdnMatch[1];
+  }
+  return null;
+}
+
+/**
+ * Fetch component source code from 21st.dev CDN.
+ * Returns the .tsx source code, or null if fetch fails.
+ */
+async function fetchCdnCode(cdnUrl: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(cdnUrl, 5000);
+    if (!res.ok) return null;
+    const code = await res.text();
+    if (code.length < 50) return null;
+    return code.slice(0, 3000); // Cap to avoid prompt bloat
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Try to fetch component code from shadcn/ui registry as fallback.
+ * Free API, no key needed. Returns null if component doesn't exist.
+ */
+async function fetchShadcnComponent(name: string): Promise<string | null> {
+  // Normalize component name to slug (e.g., "Rich Button" → "button", "Card Hover" → "card")
+  const slug = name.toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .split(/[\s-]+/)
+    .pop() ?? name.toLowerCase(); // Use last word as the base component name
+
+  try {
+    const res = await fetchWithTimeout(
+      `https://ui.shadcn.com/r/styles/new-york/${slug}.json`, 5000
+    );
+    if (!res.ok) return null;
+    const data = await res.json() as { files?: { content?: string }[] };
+    const content = data.files?.[0]?.content;
+    if (!content || content.length < 50) return null;
+    console.log(`[shadcn] Got source code for "${slug}" (${content.length} chars)`);
+    return content.slice(0, 3000);
+  } catch {
+    return null;
+  }
+}
+
 // ─── Scrape a 21st.dev component page ──────────────────────────
 
-function extractComponentInfo(html: string, url: string): UIComponentResult | null {
+async function extractComponentInfo(html: string, url: string): Promise<UIComponentResult | null> {
   // Extract title
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const rawTitle = titleMatch?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "";
-  // Clean title: remove "- 21st.dev" suffix, etc.
-  const name = rawTitle.replace(/\s*[-|]\s*21st\.dev.*/i, "").trim();
+  // Clean title: 21st.dev format is "Name | Community Components - 21st | 21st"
+  // Take everything before the first " | " separator
+  const name = rawTitle.split(/\s*\|\s*/)[0]?.trim() ?? rawTitle.trim();
   if (!name || name.length < 3) return null;
 
   // Extract meta description
@@ -118,22 +203,18 @@ function extractComponentInfo(html: string, url: string): UIComponentResult | nu
     html.match(/content="([^"]+)"\s+(?:name|property)="(?:description|og:description)"/i);
   const description = descMatch?.[1]?.slice(0, 300) ?? "";
 
-  // Try to extract code snippets (look for <code> or <pre> blocks)
-  const codeBlocks: string[] = [];
-  const codePattern = /<(?:code|pre)[^>]*>([\s\S]*?)<\/(?:code|pre)>/gi;
-  let codeMatch;
-  while ((codeMatch = codePattern.exec(html)) !== null) {
-    const code = codeMatch[1]
-      .replace(/<[^>]+>/g, "")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&")
-      .replace(/&#x27;/g, "'")
-      .replace(/&quot;/g, '"')
-      .trim();
-    if (code.length > 20 && code.length < 2000) {
-      codeBlocks.push(code);
+  // Extract source code CDN URL from RSC payload, then fetch the actual .tsx file
+  const cdnUrl = extractCdnCodeUrl(html);
+  let extractedCode: string | null = null;
+  if (cdnUrl) {
+    extractedCode = await fetchCdnCode(cdnUrl);
+    if (extractedCode) {
+      console.log(`[21st.dev] CDN code for "${name}": ${cdnUrl} (${extractedCode.length} chars)`);
+    } else {
+      console.log(`[21st.dev] CDN fetch failed for "${name}": ${cdnUrl}`);
     }
+  } else {
+    console.log(`[21st.dev] No CDN URL found in RSC for "${name}"`);
   }
 
   // Determine category from URL or title
@@ -150,12 +231,20 @@ function extractComponentInfo(html: string, url: string): UIComponentResult | nu
   else if (lower.includes("modal") || lower.includes("dialog") || lower.includes("drawer")) category = "overlay";
   else if (lower.includes("tab") || lower.includes("accordion")) category = "layout";
 
-  // Build implementation hint from code or description
-  const codeHint = codeBlocks.length > 0
-    ? `Implementation reference:\n${codeBlocks[0].slice(0, 500)}`
-    : description
-      ? `${description}. Use React + Tailwind CSS. No external dependencies.`
-      : `${name} component. Implement with React + Tailwind CSS. No external dependencies.`;
+  // Use CDN code if available, otherwise try shadcn fallback
+  let codeHint: string;
+  if (extractedCode) {
+    codeHint = `Source code:\n\`\`\`tsx\n${extractedCode}\n\`\`\``;
+  } else {
+    // Try shadcn/ui as fallback
+    const shadcnCode = await fetchShadcnComponent(name).catch(() => null);
+    if (shadcnCode) {
+      console.log(`[shadcn] Fallback code for "${name}" (${shadcnCode.length} chars)`);
+      codeHint = `Source code (shadcn/ui):\n\`\`\`tsx\n${shadcnCode}\n\`\`\``;
+    } else {
+      codeHint = `${name} component. Implement with React + Tailwind CSS.`;
+    }
+  }
 
   return {
     name,
@@ -166,13 +255,64 @@ function extractComponentInfo(html: string, url: string): UIComponentResult | nu
   };
 }
 
-// ─── Main: search + scrape ──────────────────────────────────────
+// ─── Extract component links from listing pages ────────────────
 
 /**
- * Search 21st.dev for UI components matching the query.
- * Returns structured component data for code generation context.
+ * When we land on a 21st.dev category/listing page, extract links
+ * to individual component pages (e.g., /community/components/author/name).
  */
-export async function search21stDev(query: string): Promise<UIComponentResult[]> {
+function extractComponentLinksFromListing(html: string): string[] {
+  const links: string[] = [];
+  const seen = new Set<string>();
+  // Match links to individual component pages
+  const pattern = /href="(\/community\/components\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+)"/gi;
+  let match;
+  while ((match = pattern.exec(html)) !== null) {
+    const path = match[1];
+    if (!seen.has(path)) {
+      seen.add(path);
+      links.push(`https://21st.dev${path}`);
+    }
+    if (links.length >= 3) break;
+  }
+  // Also check RSC payload for component links
+  if (links.length === 0) {
+    const rscPattern = /\/community\/components\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+/g;
+    while ((match = rscPattern.exec(html)) !== null) {
+      const path = match[0];
+      if (!seen.has(path)) {
+        seen.add(path);
+        links.push(`https://21st.dev${path}`);
+      }
+      if (links.length >= 3) break;
+    }
+  }
+  return links;
+}
+
+// ─── Main: search + scrape ──────────────────────────────────────
+
+// Junk patterns: generic 21st.dev navigation/category pages, not actual components
+const JUNK_NAME_PATTERNS = [
+  /^discover\b/i, /community\s*components/i, /community-made/i,
+  /^browse\b/i, /^all\s*components/i, /^21st\.dev$/i,
+  /^sign\s*in/i, /^log\s*in/i, /^pricing$/i, /^home$/i,
+  /^about$/i, /^contact$/i, /^docs$/i,
+  /\bcomponents$/i, // Category page titles like "Hero Components", "Text Components"
+];
+
+function isJunkResult(name: string): boolean {
+  return (
+    name.length <= 2 ||
+    name.length > 60 ||
+    JUNK_NAME_PATTERNS.some((p) => p.test(name))
+  );
+}
+
+/**
+ * Run a single 21st.dev search query and return scraped components.
+ */
+async function searchSingleQuery(query: string): Promise<UIComponentResult[]> {
   // Check cache
   const cached = componentCache.get(query);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -180,41 +320,77 @@ export async function search21stDev(query: string): Promise<UIComponentResult[]>
     return cached.results;
   }
 
-  const searchQuery = encodeURIComponent(`site:21st.dev ${query} component react`);
-  const searchUrl = `https://lite.duckduckgo.com/lite/?q=${searchQuery}`;
-
-  console.log(`[21st.dev] Searching for: ${query}`);
+  console.log(`[21st.dev] Searching Brave for: "${query}"`);
 
   try {
-    const res = await fetchWithTimeout(searchUrl, 8000);
-    if (!res.ok) {
-      console.warn(`[21st.dev] DuckDuckGo returned ${res.status}`);
+    const html = await braveSearch(`site:21st.dev/community/components/ ${query}`);
+    if (!html) {
       componentCache.set(query, { results: [], timestamp: Date.now() });
       return [];
     }
-
-    const html = await res.text();
-    const hits = parseDDGResults(html);
+    const hits = parseBraveResults(html);
 
     if (hits.length === 0) {
-      console.log(`[21st.dev] No results found for "${query}"`);
+      console.log(`[21st.dev] No results for "${query}"`);
       componentCache.set(query, { results: [], timestamp: Date.now() });
       return [];
     }
 
-    console.log(`[21st.dev] Found ${hits.length} results, scraping top 3...`);
+    // Separate individual component pages from listing/search pages
+    const individualHits: SearchHit[] = [];
+    const listingHits: SearchHit[] = [];
 
-    // Scrape top 3 component pages in parallel
-    const scrapePromises = hits.slice(0, 3).map(async (hit) => {
+    for (const hit of hits) {
+      const url = hit.url;
+      if (url.includes('/components/s/') || url.match(/\/s\/[^/]+$/) || url.includes('/docs/')) {
+        listingHits.push(hit);
+      } else {
+        individualHits.push(hit);
+      }
+    }
+
+    // If we only got listing pages, fetch them and follow links to individual components
+    if (individualHits.length === 0 && listingHits.length > 0) {
+      console.log(`[21st.dev] Only got ${listingHits.length} listing pages — following links to individual components...`);
+      for (const listing of listingHits.slice(0, 2)) {
+        try {
+          const listRes = await fetchWithTimeout(listing.url, 6000);
+          if (!listRes.ok) continue;
+          const listHtml = (await listRes.text()).slice(0, 200_000);
+          const componentLinks = extractComponentLinksFromListing(listHtml);
+          console.log(`[21st.dev] Found ${componentLinks.length} component links from listing: ${listing.url}`);
+          for (const link of componentLinks) {
+            individualHits.push({ url: link, title: "", snippet: "" });
+          }
+          if (individualHits.length >= 4) break;
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    if (individualHits.length === 0) {
+      console.log(`[21st.dev] No individual component pages found for "${query}"`);
+      componentCache.set(query, { results: [], timestamp: Date.now() });
+      return [];
+    }
+
+    console.log(`[21st.dev] Found ${hits.length} results for "${query}" (${individualHits.length} individual components), scraping top 4...`);
+
+    // Scrape top 4 pages in parallel
+    const scrapePromises = individualHits.slice(0, 4).map(async (hit) => {
       try {
-        const pageRes = await fetchWithTimeout(hit.url, 6000);
+        const pageRes = await fetchWithTimeout(hit.url, 8000);
         if (!pageRes.ok) return null;
-        const pageHtml = (await pageRes.text()).slice(0, 100_000);
+        // CDN code URL is in RSC data near end of page (~190K+), so read full page
+        const pageHtml = await pageRes.text();
         return extractComponentInfo(pageHtml, hit.url);
       } catch {
         // Use search result data as fallback
+        const name = hit.title.replace(/\s*[-|]\s*21st(?:\.dev)?.*/i, "").trim();
+        if (isJunkResult(name)) return null;
         return {
-          name: hit.title.replace(/\s*[-|]\s*21st\.dev.*/i, "").trim(),
+          name,
           category: "component",
           description: hit.snippet || hit.title,
           codeHint: `${hit.title}. Implement with React + Tailwind CSS. No external dependencies.`,
@@ -223,82 +399,89 @@ export async function search21stDev(query: string): Promise<UIComponentResult[]>
       }
     });
 
-    // Filter out junk: generic 21st.dev navigation pages, not actual components
-    const JUNK_PATTERNS = [
-      /discover/i, /community\s*components/i, /community-made/i,
-      /browse/i, /all\s*components/i, /21st\.dev$/i,
-      /sign\s*in/i, /log\s*in/i, /pricing/i,
-    ];
     const results = (await Promise.all(scrapePromises)).filter(
-      (r): r is UIComponentResult =>
-        r !== null &&
-        r.name.length > 2 &&
-        r.name.length < 50 &&
-        !JUNK_PATTERNS.some((p) => p.test(r.name)),
+      (r): r is UIComponentResult => r !== null && !isJunkResult(r.name),
     );
 
-    console.log(`[21st.dev] Scraped ${results.length} components: ${results.map((r) => r.name).join(", ")}`);
+    console.log(`[21st.dev] Scraped ${results.length} components for "${query}": ${results.map((r) => `${r.name}(${r.codeHint.startsWith('Source code') ? 'HAS CODE' : 'no code'})`).join(", ")}`);
     componentCache.set(query, { results, timestamp: Date.now() });
     return results;
   } catch (e) {
-    console.warn(`[21st.dev] Search failed:`, e instanceof Error ? e.message : e);
+    console.warn(`[21st.dev] Search failed for "${query}":`, e instanceof Error ? e.message : e);
     componentCache.set(query, { results: [], timestamp: Date.now() });
     return [];
   }
 }
 
-// ─── Domain → UI component type map for 21st.dev ────────────────
-// Unlike Figma (which needs app categories), 21st.dev needs COMPONENT TYPES
-
-const COMPONENT_DOMAIN_MAP: Array<{ keywords: string[]; componentQuery: string }> = [
-  { keywords: ["dating", "match", "swipe", "tinder", "bumble", "hinge", "ditto"], componentQuery: "profile card swipe" },
-  { keywords: ["social", "feed", "post", "follow", "timeline", "community"], componentQuery: "social feed card" },
-  { keywords: ["chat", "message", "messaging", "conversation"], componentQuery: "chat message bubble" },
-  { keywords: ["shop", "store", "ecommerce", "product", "cart", "marketplace"], componentQuery: "product card pricing" },
-  { keywords: ["fitness", "workout", "gym", "exercise", "health", "tracker"], componentQuery: "progress chart stats" },
-  { keywords: ["food", "recipe", "restaurant", "delivery", "menu"], componentQuery: "food card menu" },
-  { keywords: ["finance", "money", "bank", "invest", "budget", "wallet"], componentQuery: "chart stats card" },
-  { keywords: ["task", "todo", "project", "productivity", "kanban"], componentQuery: "kanban task card" },
-  { keywords: ["education", "learn", "course", "study", "quiz"], componentQuery: "course card progress" },
-  { keywords: ["travel", "booking", "hotel", "flight", "trip"], componentQuery: "booking card hero" },
-  { keywords: ["music", "spotify", "playlist", "audio", "podcast"], componentQuery: "player card audio" },
-  { keywords: ["dashboard", "analytics", "admin", "metrics"], componentQuery: "dashboard chart stats" },
-  { keywords: ["portfolio", "resume", "personal", "landing"], componentQuery: "hero section landing" },
-  { keywords: ["news", "blog", "article", "magazine"], componentQuery: "article card grid" },
-];
+/**
+ * Search 21st.dev for UI components matching the prompt.
+ * Runs multiple queries in parallel and merges + dedupes results.
+ */
+export async function search21stDev(query: string): Promise<UIComponentResult[]> {
+  return searchSingleQuery(query);
+}
 
 /**
- * Build a search query from the user's prompt.
- * Extracts UI COMPONENT TYPES relevant to the app domain (not product names).
+ * Run multiple search queries in parallel and merge results.
+ * If Brave search yields no components with code, falls back to
+ * directly fetching from curated component URL registry.
  */
-export function build21stDevSearchQuery(prompt: string): string {
-  const lower = prompt.toLowerCase();
+export async function search21stDevMulti(queries: string[]): Promise<UIComponentResult[]> {
+  const allResults = await Promise.all(queries.map((q) => searchSingleQuery(q)));
+  const merged: UIComponentResult[] = [];
+  const seen = new Set<string>();
 
-  // Check domain map — map app type to relevant component types
-  for (const entry of COMPONENT_DOMAIN_MAP) {
-    if (entry.keywords.some((kw) => lower.includes(kw))) {
-      return entry.componentQuery;
+  for (const results of allResults) {
+    for (const r of results) {
+      const key = r.name.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(r);
+      }
     }
   }
 
-  // Fallback: extract meaningful words
-  const stopWords = new Set([
-    "make", "me", "a", "an", "the", "build", "create", "generate",
-    "app", "application", "web", "website", "please", "i", "want",
-    "need", "like", "with", "and", "for", "that", "this", "my",
-    "can", "you", "just", "simple", "good", "best", "new",
-  ]);
-  const stripped = lower.replace(/like\s+[a-z0-9]+(?:\s+[a-z0-9]+)?(?:\s+ai)?/gi, "");
-  const words = stripped
-    .replace(/[^a-z0-9\s]/g, "")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !stopWords.has(w));
+  console.log(`[21st.dev] Merged ${merged.length} unique components from ${queries.length} queries (${merged.filter(r => r.codeHint.startsWith('Source code')).length} with code)`);
+  return merged;
+}
 
-  if (words.length > 0) {
-    return words.slice(0, 3).join(" ");
-  }
+// ─── High-impact UI component queries ────────────────────────────
+// Just grab the coolest effects and animations — works for any app type.
+// Each run picks 2 random queries for variety.
 
-  return "hero card button";
+const STANDOUT_QUERIES = [
+  "animated gradient",
+  "shimmer text",
+  "spotlight card",
+  "glassmorphism hero",
+  "hover card effect",
+  "animated button",
+  "text reveal animation",
+  "bento grid",
+  "gradient border",
+  "card hover 3d",
+  "animated background",
+  "glow effect",
+];
+
+/**
+ * Build search query(s) from the user's prompt.
+ * Returns the primary query string. For richer results, use build21stDevSearchQueries().
+ */
+export function build21stDevSearchQuery(prompt: string, discoveredCategory?: string | null): string {
+  return build21stDevSearchQueries(prompt, discoveredCategory)[0];
+}
+
+/**
+ * Pick 2 random high-impact component queries.
+ * No domain classification — just grab cool UI effects.
+ */
+export function build21stDevSearchQueries(_prompt: string, _discoveredCategory?: string | null): string[] {
+  // Shuffle and pick 2
+  const shuffled = [...STANDOUT_QUERIES].sort(() => Math.random() - 0.5);
+  const queries = shuffled.slice(0, 2);
+  console.log(`[21st.dev] Search queries: ${queries.join(", ")}`);
+  return queries;
 }
 
 /**
@@ -308,8 +491,9 @@ export function format21stDevComponents(components: UIComponentResult[]): string
   if (components.length === 0) return "";
 
   const lines = [
-    "=== LIVE 21st.dev COMPONENT REFERENCES ===",
-    "Use these real-world component patterns as inspiration. Implement with React + Tailwind CSS only (no imports).\n",
+    "=== REAL COMPONENT SOURCE CODE REFERENCES ===",
+    "Below are actual source code implementations from 21st.dev and shadcn/ui.",
+    "Study these patterns and adapt them for the app. Use the same animation techniques, CSS patterns, and component structure. React + Tailwind CSS only (no external imports).\n",
   ];
 
   for (const comp of components) {

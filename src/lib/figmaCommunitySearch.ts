@@ -1,5 +1,5 @@
 /**
- * Search Figma Community for free templates via DuckDuckGo.
+ * Search Figma Community for free templates via Brave Search.
  * Fetches the best match via Figma API and extracts design tokens.
  * Results are cached in the figma_templates DB table.
  */
@@ -8,12 +8,24 @@ import { fetchFigmaTemplate, parseFigmaUrl, templateToContextBrief, type FigmaTe
 import { importFigmaTemplate, getCachedTemplate } from "./figmaTemplateCache.js";
 import type { AppContextBrief } from "./contextResearch.js";
 
-// ─── In-memory search result cache (avoids re-searching DuckDuckGo) ──
+// ─── In-memory search result cache ──────────────────────────────
 
 const searchCache = new Map<string, { fileKey: string | null; timestamp: number }>();
 const SEARCH_CACHE_TTL = 3_600_000; // 1 hour
 
-// ─── DuckDuckGo search ──────────────────────────────────────────
+// ─── Brave Search ───────────────────────────────────────────────
+
+// Rotate user agents to avoid fingerprinting
+const USER_AGENTS = [
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
+];
+
+function randomUA(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
 
 async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -22,8 +34,8 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
     return await fetch(url, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent": randomUA(),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
       redirect: "follow",
@@ -34,12 +46,12 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
 }
 
 /**
- * Extract Figma community file URLs from DuckDuckGo HTML results.
+ * Extract Figma community file URLs from Brave Search HTML results.
+ * Brave uses: <a href="https://www.figma.com/community/file/ID/..." class="svelte-... l1">
  */
 function extractFigmaUrls(html: string): string[] {
   const urls: string[] = [];
-  // Match any Figma community file URL in href attributes or plain text
-  const pattern = /https?:\/\/(?:www\.)?figma\.com\/community\/file\/(\d+)[^"'\s]*/gi;
+  const pattern = /https?:\/\/(?:www\.)?figma\.com\/community\/file\/(\d+)[^"'\s<>]*/gi;
   let match;
   while ((match = pattern.exec(html)) !== null) {
     urls.push(match[0]);
@@ -55,28 +67,20 @@ function extractFigmaUrls(html: string): string[] {
 }
 
 /**
- * Search Figma Community for a template matching the query.
- * Returns the file key of the best match, or null if nothing found.
+ * Search for Figma templates using Brave Search.
+ * Returns multiple file keys (up to 5) so we can retry if the first one is 404.
  */
-async function searchDuckDuckGoForFigma(query: string): Promise<string | null> {
-  // Check in-memory cache first
-  const cached = searchCache.get(query);
-  if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL) {
-    console.log(`[Figma Search] Cache hit for "${query}"`);
-    return cached.fileKey;
-  }
+async function searchForFigma(query: string): Promise<string[]> {
+  const searchQuery = encodeURIComponent(`site:figma.com/community/file ${query} app template`);
+  const searchUrl = `https://search.brave.com/search?q=${searchQuery}&source=web`;
 
-  const searchQuery = encodeURIComponent(`site:figma.com/community/file ${query} app template free`);
-  const searchUrl = `https://lite.duckduckgo.com/lite/?q=${searchQuery}`;
-
-  console.log(`[Figma Search] Searching DuckDuckGo for: ${query}`);
+  console.log(`[Figma Search] Searching Brave for: ${query}`);
 
   try {
-    const res = await fetchWithTimeout(searchUrl, 8000);
+    const res = await fetchWithTimeout(searchUrl, 10000);
     if (!res.ok) {
-      console.warn(`[Figma Search] DuckDuckGo returned ${res.status}`);
-      searchCache.set(query, { fileKey: null, timestamp: Date.now() });
-      return null;
+      console.warn(`[Figma Search] Brave returned ${res.status}`);
+      return [];
     }
 
     const html = await res.text();
@@ -84,18 +88,19 @@ async function searchDuckDuckGoForFigma(query: string): Promise<string | null> {
 
     if (figmaUrls.length === 0) {
       console.log(`[Figma Search] No Figma community files found for "${query}"`);
-      searchCache.set(query, { fileKey: null, timestamp: Date.now() });
-      return null;
+      return [];
     }
 
-    const fileKey = parseFigmaUrl(figmaUrls[0]);
-    console.log(`[Figma Search] Found ${figmaUrls.length} results, best: ${figmaUrls[0]} (key: ${fileKey})`);
-    searchCache.set(query, { fileKey, timestamp: Date.now() });
-    return fileKey;
+    const fileKeys = figmaUrls
+      .slice(0, 5)
+      .map((url) => parseFigmaUrl(url))
+      .filter((k): k is string => k !== null);
+
+    console.log(`[Figma Search] Found ${figmaUrls.length} results for "${query}", top ${fileKeys.length} keys: ${fileKeys.join(", ")}`);
+    return fileKeys;
   } catch (e) {
     console.warn(`[Figma Search] Failed:`, e instanceof Error ? e.message : e);
-    searchCache.set(query, { fileKey: null, timestamp: Date.now() });
-    return null;
+    return [];
   }
 }
 
@@ -103,11 +108,13 @@ async function searchDuckDuckGoForFigma(query: string): Promise<string | null> {
 
 /**
  * Search Figma Community for the best template matching the user's app type.
+ * Tries multiple search queries (broad → narrow) until one finds a result.
  * Fetches design tokens and caches the result.
  * Returns null if no template found or Figma API key not set.
  */
 export async function searchFigmaCommunity(
   appType: string,
+  discoveredCategory?: string | null,
 ): Promise<{ template: FigmaTemplateData; contextOverlay: Partial<AppContextBrief> } | null> {
   // Require API key
   if (!process.env.FIGMA_API_KEY) {
@@ -115,111 +122,212 @@ export async function searchFigmaCommunity(
     return null;
   }
 
-  // Search DuckDuckGo for the best Figma template
-  const fileKey = await searchDuckDuckGoForFigma(appType);
-  if (!fileKey) return null;
-
-  // Check if we already have this template cached in DB
-  const cached = await getCachedTemplate(fileKey);
-  if (cached) {
-    console.log(`[Figma Search] Using cached template "${cached.file_name}" for "${appType}"`);
-    const templateData: FigmaTemplateData = {
-      file_key: cached.file_key,
-      file_name: cached.file_name,
-      last_modified: cached.updated_at.toISOString(),
-      thumbnail_url: cached.thumbnail_url,
-      design_tokens: cached.design_tokens,
-      page_names: cached.page_names,
-      component_count: cached.component_count,
-      raw_metadata: {},
-    };
-    return {
-      template: templateData,
-      contextOverlay: templateToContextBrief(templateData),
-    };
+  // Collect candidate file keys from multiple search queries
+  const queries = buildFigmaSearchQueries(appType, discoveredCategory);
+  const allFileKeys: string[] = [];
+  for (const query of queries) {
+    const keys = await searchForFigma(query);
+    for (const k of keys) {
+      if (!allFileKeys.includes(k)) allFileKeys.push(k);
+    }
+    if (allFileKeys.length >= 5) break; // enough candidates
   }
 
-  // Fetch from Figma API and cache
-  try {
-    console.log(`[Figma Search] Fetching template ${fileKey} from Figma API...`);
-    const template = await fetchFigmaTemplate(fileKey);
+  if (allFileKeys.length === 0) return null;
 
-    // Cache in DB for future use
-    try {
-      await importFigmaTemplate(fileKey);
-    } catch (e) {
-      console.warn("[Figma Search] DB cache failed (non-fatal):", e);
+  // Try each file key until one works (handles 404s from private/removed files)
+  for (const fileKey of allFileKeys.slice(0, 5)) {
+    // Check DB cache first
+    const cached = await getCachedTemplate(fileKey);
+    if (cached) {
+      console.log(`[Figma Search] Using cached template "${cached.file_name}" for "${appType}"`);
+      const templateData: FigmaTemplateData = {
+        file_key: cached.file_key,
+        file_name: cached.file_name,
+        last_modified: cached.updated_at.toISOString(),
+        thumbnail_url: cached.thumbnail_url,
+        design_tokens: cached.design_tokens,
+        page_names: cached.page_names,
+        component_count: cached.component_count,
+        raw_metadata: {},
+      };
+      return {
+        template: templateData,
+        contextOverlay: templateToContextBrief(templateData),
+      };
     }
 
-    console.log(`[Figma Search] Got template "${template.file_name}" — ${template.component_count} components, ${template.design_tokens.colors.all.length} colors`);
+    // Fetch from Figma API
+    try {
+      console.log(`[Figma Search] Fetching template ${fileKey} from Figma API...`);
+      const template = await fetchFigmaTemplate(fileKey);
 
-    return {
-      template,
-      contextOverlay: templateToContextBrief(template),
-    };
-  } catch (e) {
-    console.warn(`[Figma Search] Failed to fetch template ${fileKey}:`, e instanceof Error ? e.message : e);
-    return null;
+      // Cache in DB for future use
+      try {
+        await importFigmaTemplate(fileKey);
+      } catch (e) {
+        console.warn("[Figma Search] DB cache failed (non-fatal):", e);
+      }
+
+      console.log(`[Figma Search] Got template "${template.file_name}" — ${template.component_count} components, ${template.design_tokens.colors.all.length} colors`);
+
+      return {
+        template,
+        contextOverlay: templateToContextBrief(template),
+      };
+    } catch (e) {
+      console.warn(`[Figma Search] Template ${fileKey} failed (trying next):`, e instanceof Error ? e.message : e);
+      continue; // Try next file key
+    }
   }
+
+  console.log("[Figma Search] All candidate templates failed");
+  return null;
 }
 
-// ─── Domain keyword map ─────────────────────────────────────────
-// Maps prompt keywords → Figma-friendly app category search terms
+// ─── Prompt Classification Pipeline ─────────────────────────────
+// Instead of keyword-matching the raw prompt, we classify WHAT the user
+// actually wants, then generate broad → narrow Figma search queries.
 
-const DOMAIN_MAP: Array<{ keywords: string[]; figmaQuery: string }> = [
-  { keywords: ["dating", "match", "swipe", "tinder", "bumble", "hinge", "ditto"], figmaQuery: "dating app" },
-  { keywords: ["social", "feed", "post", "follow", "timeline", "community", "network"], figmaQuery: "social media app" },
-  { keywords: ["chat", "message", "messaging", "dm", "conversation", "whatsapp", "telegram"], figmaQuery: "messaging chat app" },
-  { keywords: ["shop", "store", "ecommerce", "product", "cart", "buy", "sell", "marketplace"], figmaQuery: "ecommerce shop" },
-  { keywords: ["fitness", "workout", "gym", "exercise", "health", "tracker", "training"], figmaQuery: "fitness tracker app" },
-  { keywords: ["food", "recipe", "restaurant", "delivery", "menu", "cooking", "meal"], figmaQuery: "food delivery app" },
-  { keywords: ["finance", "money", "bank", "invest", "budget", "payment", "wallet", "crypto"], figmaQuery: "finance banking app" },
-  { keywords: ["task", "todo", "project", "productivity", "kanban", "planner", "notes"], figmaQuery: "productivity task app" },
-  { keywords: ["education", "learn", "course", "study", "quiz", "tutorial", "school"], figmaQuery: "education learning app" },
-  { keywords: ["travel", "booking", "hotel", "flight", "trip", "vacation", "airbnb"], figmaQuery: "travel booking app" },
-  { keywords: ["music", "spotify", "playlist", "audio", "podcast", "streaming", "player"], figmaQuery: "music streaming app" },
-  { keywords: ["dashboard", "analytics", "admin", "metrics", "reporting", "monitor"], figmaQuery: "dashboard analytics" },
-  { keywords: ["real estate", "property", "house", "rent", "listing", "apartment"], figmaQuery: "real estate app" },
-  { keywords: ["crm", "sales", "pipeline", "leads", "contacts", "deals"], figmaQuery: "crm dashboard" },
-  { keywords: ["portfolio", "resume", "personal", "landing"], figmaQuery: "portfolio landing page" },
-  { keywords: ["weather", "forecast", "climate"], figmaQuery: "weather app" },
-  { keywords: ["news", "blog", "article", "magazine", "media"], figmaQuery: "news magazine app" },
+interface AppCategory {
+  category: string;       // e.g. "dating", "scheduling", "social"
+  figmaQueries: string[]; // broad → narrow search terms to try
+}
+
+// Comprehensive category map — each entry has BROAD and NARROW queries
+// so we always find a Figma template even for niche prompts
+const APP_CATEGORIES: AppCategory[] = [
+  { category: "dating", figmaQueries: ["dating app mobile", "dating app", "social app mobile UI"] },
+  { category: "social", figmaQueries: ["social media app", "social network mobile", "feed app mobile UI"] },
+  { category: "chat", figmaQueries: ["messaging app mobile", "chat app", "messenger mobile UI"] },
+  { category: "ecommerce", figmaQueries: ["ecommerce app mobile", "shopping app", "online store mobile UI"] },
+  { category: "fitness", figmaQueries: ["fitness app mobile", "health tracker app", "workout app mobile UI"] },
+  { category: "food", figmaQueries: ["food delivery app", "restaurant app mobile", "recipe app mobile UI"] },
+  { category: "finance", figmaQueries: ["banking app mobile", "finance app", "fintech mobile UI"] },
+  { category: "productivity", figmaQueries: ["productivity app", "task manager mobile", "project management app UI"] },
+  { category: "education", figmaQueries: ["education app mobile", "e-learning app", "course app mobile UI"] },
+  { category: "travel", figmaQueries: ["travel app mobile", "booking app", "hotel booking mobile UI"] },
+  { category: "music", figmaQueries: ["music app mobile", "music player app", "streaming app mobile UI"] },
+  { category: "dashboard", figmaQueries: ["dashboard UI", "admin dashboard", "analytics dashboard web UI"] },
+  { category: "realestate", figmaQueries: ["real estate app mobile", "property listing app", "real estate mobile UI"] },
+  { category: "crm", figmaQueries: ["CRM dashboard", "sales dashboard", "CRM app UI"] },
+  { category: "portfolio", figmaQueries: ["portfolio website", "landing page", "personal website UI"] },
+  { category: "weather", figmaQueries: ["weather app mobile", "weather app", "forecast app mobile UI"] },
+  { category: "news", figmaQueries: ["news app mobile", "magazine app", "news reader mobile UI"] },
+  { category: "scheduling", figmaQueries: ["calendar app mobile", "scheduling app", "booking calendar app UI"] },
+  { category: "medical", figmaQueries: ["healthcare app mobile", "medical app", "telemedicine app mobile UI"] },
+  { category: "gaming", figmaQueries: ["gaming app mobile", "game UI", "esports app mobile UI"] },
 ];
 
+// Keywords that signal each category — includes product names, synonyms, and domain terms
+const CATEGORY_SIGNALS: Record<string, string[]> = {
+  dating: ["dating", "match", "swipe", "tinder", "bumble", "hinge", "ditto", "love", "romance", "singles", "couples"],
+  social: ["social", "feed", "post", "follow", "timeline", "community", "network", "share", "friends", "stories", "instagram", "twitter", "tiktok"],
+  chat: ["chat", "message", "messaging", "dm", "conversation", "whatsapp", "telegram", "slack", "discord", "communicate"],
+  ecommerce: ["shop", "store", "ecommerce", "product", "cart", "buy", "sell", "marketplace", "amazon", "shopify", "etsy", "order"],
+  fitness: ["fitness", "workout", "gym", "exercise", "health", "tracker", "training", "steps", "calories", "strava", "peloton", "running"],
+  food: ["food", "recipe", "restaurant", "delivery", "menu", "cooking", "meal", "uber eats", "doordash", "grubhub", "ingredients"],
+  finance: ["finance", "money", "bank", "invest", "budget", "payment", "wallet", "crypto", "stock", "trading", "robinhood", "venmo", "cashapp"],
+  productivity: ["task", "todo", "project", "productivity", "kanban", "planner", "notes", "notion", "trello", "asana", "jira", "organize"],
+  education: ["education", "learn", "course", "study", "quiz", "tutorial", "school", "student", "teach", "duolingo", "coursera", "udemy"],
+  travel: ["travel", "booking", "hotel", "flight", "trip", "vacation", "airbnb", "expedia", "destination", "itinerary"],
+  music: ["music", "spotify", "playlist", "audio", "podcast", "streaming", "player", "song", "album", "artist", "soundcloud"],
+  dashboard: ["dashboard", "analytics", "admin", "metrics", "reporting", "monitor", "data", "chart", "statistics"],
+  realestate: ["real estate", "property", "house", "rent", "listing", "apartment", "zillow", "realtor", "mortgage"],
+  crm: ["crm", "sales", "pipeline", "leads", "contacts", "deals", "salesforce", "hubspot", "client"],
+  portfolio: ["portfolio", "resume", "personal", "landing", "showcase", "about me"],
+  weather: ["weather", "forecast", "climate", "temperature", "rain", "sunny"],
+  news: ["news", "blog", "article", "magazine", "media", "journalist", "headline", "newsletter"],
+  scheduling: ["schedule", "calendar", "appointment", "booking", "availability", "meeting", "cal", "calendly", "event", "agenda", "planner"],
+  medical: ["medical", "doctor", "patient", "hospital", "health", "prescription", "telemedicine", "clinic", "diagnosis"],
+  gaming: ["game", "gaming", "esports", "leaderboard", "score", "player", "tournament", "level"],
+};
+
 /**
- * Build a search query from the user's prompt.
- * Extracts the APP CATEGORY (not product name) for a targeted Figma search.
+ * Classify the user's prompt into an app category.
+ * This is the "logic pipeline" — it strips product names, looks at the full
+ * prompt context, and scores each category to find the best match.
  */
-export function buildFigmaSearchQuery(prompt: string): string {
+function classifyPrompt(prompt: string): AppCategory {
   const lower = prompt.toLowerCase();
 
-  // Strip "like [product name]" references — we want the category, not the brand
-  const stripped = lower.replace(/like\s+[a-z0-9]+(?:\s+[a-z0-9]+)?(?:\s+ai)?/gi, "").trim();
+  // Step 1: Strip "like [product]" to avoid matching on brand names
+  const withoutRef = lower.replace(/like\s+\w+(?:\s+\w+)?(?:\s+ai)?/gi, "").trim();
 
-  // Check domain map first — most reliable
-  for (const entry of DOMAIN_MAP) {
-    const matched = entry.keywords.filter((kw) => lower.includes(kw));
-    if (matched.length > 0) {
-      console.log(`[Figma Search] Domain match: "${matched.join(", ")}" → "${entry.figmaQuery}"`);
-      return entry.figmaQuery;
+  // Step 2: Score each category based on keyword density in BOTH original and stripped prompt
+  const scores: Array<{ category: AppCategory; score: number }> = [];
+
+  for (const cat of APP_CATEGORIES) {
+    const signals = CATEGORY_SIGNALS[cat.category] ?? [];
+    let score = 0;
+
+    for (const signal of signals) {
+      // Check original prompt (product names like "tinder" → dating)
+      if (lower.includes(signal)) score += 2;
+      // Check stripped prompt (domain words like "swipe" → dating)
+      else if (withoutRef.includes(signal)) score += 3; // higher weight for domain words
     }
+
+    if (score > 0) scores.push({ category: cat, score });
   }
 
-  // Fallback: extract meaningful words from the stripped prompt
+  // Step 3: Pick highest scoring category
+  scores.sort((a, b) => b.score - a.score);
+
+  if (scores.length > 0) {
+    const best = scores[0];
+    console.log(`[Figma Search] Classified prompt as "${best.category.category}" (score: ${best.score})`);
+    if (scores.length > 1) {
+      console.log(`[Figma Search] Runner-up: "${scores[1].category.category}" (score: ${scores[1].score})`);
+    }
+    return best.category;
+  }
+
+  // Step 4: Fallback — try to extract ANY meaningful signal from stripped words
   const stopWords = new Set([
     "make", "me", "a", "an", "the", "build", "create", "generate",
     "app", "application", "web", "website", "please", "i", "want",
     "need", "like", "with", "and", "for", "that", "this", "my",
     "can", "you", "just", "simple", "good", "best", "new",
   ]);
-  const words = stripped
-    .replace(/[^a-z0-9\s]/g, "")
-    .split(/\s+/)
+  const words = withoutRef.replace(/[^a-z0-9\s]/g, "").split(/\s+/)
     .filter((w) => w.length > 2 && !stopWords.has(w));
 
   if (words.length > 0) {
-    return words.slice(0, 3).join(" ") + " app";
+    const fallbackQuery = words.slice(0, 2).join(" ") + " app";
+    console.log(`[Figma Search] No category match, using extracted words: "${fallbackQuery}"`);
+    return { category: "generic", figmaQueries: [fallbackQuery, "mobile app UI kit", "app template"] };
   }
 
-  return "mobile app UI";
+  console.log("[Figma Search] No classification possible, using generic queries");
+  return { category: "generic", figmaQueries: ["mobile app UI kit", "app template", "dashboard UI"] };
+}
+
+/**
+ * Build multiple search queries from the user's prompt.
+ * If `discoveredCategory` is provided (from web search intelligence),
+ * use that directly instead of trying to classify from the raw prompt.
+ * This is the "logic pipeline" — web search discovers what the product is,
+ * and we use that knowledge to find relevant Figma templates.
+ */
+export function buildFigmaSearchQueries(prompt: string, discoveredCategory?: string | null): string[] {
+  // If web search already told us the category, use it directly
+  if (discoveredCategory) {
+    const match = APP_CATEGORIES.find(c => c.category === discoveredCategory);
+    if (match) {
+      console.log(`[Figma Search] Using web-search-discovered category "${discoveredCategory}" for queries`);
+      return match.figmaQueries;
+    }
+  }
+
+  // Fallback: classify from the raw prompt (works for direct prompts like "dating app")
+  const classified = classifyPrompt(prompt);
+  return classified.figmaQueries;
+}
+
+/**
+ * Build a single search query (backward compat for research handler).
+ */
+export function buildFigmaSearchQuery(prompt: string, discoveredCategory?: string | null): string {
+  return buildFigmaSearchQueries(prompt, discoveredCategory)[0];
 }

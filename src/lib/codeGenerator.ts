@@ -268,13 +268,96 @@ const UI_PATTERN_LIBRARY: UIPattern[] = [
     description: "Tab switching with fade-in content transitions",
     implementation: "useState for activeTab and fadeKey. On tab change, increment fadeKey. Content wrapper: key={fadeKey} with style={{ animation: 'none' }} but use opacity transition — start opacity-0, useEffect sets opacity-1 after 10ms via state.",
   },
+
+  // === ADVANCED ANIMATIONS (high-impact, 21st.dev / Aceternity level) ===
+  {
+    name: "Magnetic Cursor Buttons",
+    category: "interaction",
+    description: "Buttons that magnetically pull toward the cursor when nearby, creating a fluid interactive feel",
+    implementation: "Wrap button in a div with onMouseMove. Calculate distance from cursor to button center. If within 100px radius, offset button position toward cursor using transform: translate(deltaX * 0.3, deltaY * 0.3) with transition: transform 0.2s ease-out. Reset on onMouseLeave. Use useRef for button element and getBoundingClientRect().",
+  },
+  {
+    name: "Parallax Scroll Sections",
+    category: "hero",
+    description: "Multiple layers move at different speeds as user scrolls, creating cinematic depth",
+    implementation: "useState for scrollY. useEffect adds scroll listener updating scrollY = window.scrollY. Background layer: style={{ transform: `translateY(${scrollY * 0.3}px)` }}. Midground: translateY(${scrollY * 0.5}px). Foreground stays static. Each layer is absolute positioned with different z-index. Add transition: transform 0.1s for smoothness.",
+  },
+  {
+    name: "Card Stack / Swipe Deck",
+    category: "card",
+    description: "Tinder-style card stack where top card can be dragged/swiped to reveal the next",
+    implementation: "useState for cards array and dragState {x, y, dragging}. Render top 3 cards stacked with decreasing scale and increasing translateY. Top card: onMouseDown starts drag, onMouseMove updates x/y offset via inline style transform: translate(${x}px, ${y}px) rotate(${x * 0.1}deg). On mouseUp, if |x| > 150, animate card off-screen and shift array. Use transition: transform 0.3s when not dragging.",
+  },
+  {
+    name: "Morphing Shape Blob",
+    category: "background",
+    description: "Organic blob shape that continuously morphs between border-radius values",
+    implementation: "useState for blobPhase (0-3). useEffect with setInterval cycling phase every 3000ms. Define 4 border-radius states: ['60% 40% 30% 70% / 60% 30% 70% 40%', '30% 60% 70% 40% / 50% 60% 30% 60%', '40% 60% 60% 40% / 70% 30% 50% 60%', '50% 30% 40% 70% / 40% 60% 60% 30%']. Apply via style={{ borderRadius: states[phase], transition: 'border-radius 3s ease-in-out', width: 400, height: 400, background: `linear-gradient(135deg, ${P}, secondary)` }}.",
+  },
+  {
+    name: "Reveal On Scroll",
+    category: "interaction",
+    description: "Sections dramatically reveal as user scrolls — elements slide up, fade in, and scale from different directions",
+    implementation: "Create a useInView hook: useRef for element, useState for isVisible. useEffect creates IntersectionObserver with threshold 0.15, sets isVisible=true when intersecting. Each section wraps content in ref'd div with style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'translateY(0) scale(1)' : 'translateY(40px) scale(0.95)', transition: 'all 0.7s cubic-bezier(0.16, 1, 0.3, 1)' }}. Stagger children with transitionDelay: `${index * 100}ms`.",
+  },
+  {
+    name: "Animated Counter Dashboard",
+    category: "text",
+    description: "Large metric numbers that spring-animate from 0 to final value with easing, plus micro-progress bars",
+    implementation: "useState for progress (0 to 1). useEffect on mount: requestAnimationFrame loop over 1500ms, progress = easeOutExpo(elapsed/1500) where easeOutExpo(t) = t===1 ? 1 : 1 - Math.pow(2, -10*t). Display Math.round(target * progress).toLocaleString(). Below each number, a progress bar div with style={{ width: `${progress * percentage}%`, transition: 'none', background: P, height: 4, borderRadius: 2 }}.",
+  },
+  {
+    name: "Flip Card Grid",
+    category: "card",
+    description: "Cards that flip 180° on hover/click to reveal back content with 3D perspective transform",
+    implementation: "Wrapper: style={{ perspective: 1000 }}. Inner container: style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0)', transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}. Front face: style={{ backfaceVisibility: 'hidden' }} with absolute positioning. Back face: same but transform: rotateY(180deg). Toggle isFlipped on click/hover.",
+  },
+  {
+    name: "Elastic Pull-to-Action",
+    category: "interaction",
+    description: "Elements that stretch elastically when dragged then snap back with spring physics",
+    implementation: "useState for pullDistance. onMouseDown starts tracking, onMouseMove sets pullDistance with resistance: Math.sign(delta) * Math.sqrt(Math.abs(delta)) * 5. Apply style={{ transform: `translateY(${pullDistance}px)`, transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)' }}. On mouseUp, reset pullDistance to 0 — the cubic-bezier creates the spring overshoot effect.",
+  },
+  {
+    name: "Particle Constellation",
+    category: "background",
+    description: "Interactive dots that form constellation lines when cursor is nearby",
+    implementation: "Generate 30 random points with useRef. useState for mousePos. useEffect with requestAnimationFrame to slowly drift each point's x/y by sin(time + i) * 0.3. Render on a full-width div using absolute-positioned 3px dots. For each pair within 120px distance (or within 150px of cursor), render a thin line via a rotated absolute div with height:1px, opacity based on distance. Update mousePos via onMouseMove on container.",
+  },
+  {
+    name: "Stacked Image Gallery",
+    category: "layout",
+    description: "Images/cards fanned like a deck, clicking one brings it to front with smooth 3D animation",
+    implementation: "useState for activeIndex. Render items stacked with each card offset by style={{ transform: `translateX(${(i - activeIndex) * 20}px) translateZ(${-Math.abs(i - activeIndex) * 30}px) rotateY(${(i - activeIndex) * -5}deg)`, zIndex: items.length - Math.abs(i - activeIndex), transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', opacity: Math.abs(i - activeIndex) > 2 ? 0 : 1 }}. Parent: style={{ perspective: 800, transformStyle: 'preserve-3d' }}. onClick sets activeIndex.",
+  },
+  {
+    name: "Liquid Glass Navigation",
+    category: "navigation",
+    description: "Navigation bar with a liquid glass blob that morphs and slides to the active item",
+    implementation: "Array of useRef for nav items. useState for activeIndex and blobStyle. On tab change, read target ref's getBoundingClientRect(). Set blobStyle = { left: rect.left - navLeft, width: rect.width }. Render absolute div behind items: style={{ ...blobStyle, transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', height: '100%', borderRadius: 12, background: 'rgba(primary, 0.1)', backdropFilter: 'blur(8px)' }}.",
+  },
+  {
+    name: "Text Reveal / Unblur",
+    category: "text",
+    description: "Hero text that starts blurred and reveals word-by-word with unblur animation",
+    implementation: "Split headline into words array. useState for revealedCount (0). useEffect with setInterval incrementing revealedCount by 1 every 80ms until all revealed. Each word span: style={{ filter: i < revealedCount ? 'blur(0px)' : 'blur(8px)', opacity: i < revealedCount ? 1 : 0.3, transform: i < revealedCount ? 'translateY(0)' : 'translateY(8px)', transition: 'all 0.5s cubic-bezier(0.16, 1, 0.3, 1)', transitionDelay: `${i * 40}ms` }}.",
+  },
 ];
+
+// Advanced animation pattern names — at least one must be selected per generation
+const ADVANCED_PATTERNS = new Set([
+  "Magnetic Cursor Buttons", "Parallax Scroll Sections", "Card Stack / Swipe Deck",
+  "Morphing Shape Blob", "Reveal On Scroll", "Flip Card Grid", "Elastic Pull-to-Action",
+  "Particle Constellation", "Stacked Image Gallery", "Liquid Glass Navigation",
+  "Text Reveal / Unblur", "Animated Counter Dashboard",
+]);
 
 /**
  * Select a random subset of UI patterns for a generation run.
- * Picks one from each category to ensure variety without overwhelming.
+ * Picks one from each category to ensure variety. Always includes
+ * at least 2 advanced/high-difficulty animation patterns.
  */
-function selectUIPatterns(count: number = 4): UIPattern[] {
+function selectUIPatterns(count: number = 6): UIPattern[] {
   const categories = Array.from(new Set(UI_PATTERN_LIBRARY.map(p => p.category)));
   const shuffled = categories.sort(() => Math.random() - 0.5);
   const selected: UIPattern[] = [];
@@ -296,6 +379,26 @@ function selectUIPatterns(count: number = 4): UIPattern[] {
     } else {
       selected[selected.length - 1] = cards[Math.floor(Math.random() * cards.length)];
     }
+  }
+
+  // Ensure at least 2 advanced animation patterns are included
+  const advancedInSelected = selected.filter(p => ADVANCED_PATTERNS.has(p.name));
+  const advancedPool = UI_PATTERN_LIBRARY.filter(
+    p => ADVANCED_PATTERNS.has(p.name) && !selected.includes(p)
+  );
+  let needed = 2 - advancedInSelected.length;
+  while (needed > 0 && advancedPool.length > 0) {
+    const pick = advancedPool.splice(Math.floor(Math.random() * advancedPool.length), 1)[0];
+    // Replace a non-advanced, non-hero, non-card pattern
+    const replaceIdx = selected.findIndex(
+      p => !ADVANCED_PATTERNS.has(p.name) && p.category !== 'hero' && p.category !== 'card'
+    );
+    if (replaceIdx >= 0) {
+      selected[replaceIdx] = pick;
+    } else {
+      selected.push(pick);
+    }
+    needed--;
   }
 
   return selected;
@@ -322,10 +425,18 @@ export function buildCodeGenSystemPrompt(themeStyle: string, uiPatterns?: UIPatt
   // Select random UI patterns if none provided
   const patterns = uiPatterns ?? selectUIPatterns(4);
   const patternSection = `
-=== UI PATTERN LIBRARY (use these specific techniques to make this app look unique) ===
-You MUST incorporate at least 2-3 of these UI patterns into the app. These are CSS/Tailwind-only techniques — no external libraries needed.
+=== UI PATTERN LIBRARY (use these specific techniques to make this app look impressive) ===
+You MUST incorporate at least 4-5 of these UI patterns into the app. Go BIG on animations — this should feel like a premium 21st.dev / Aceternity showcase, not a basic template.
 
 ${formatUIPatternPrompt(patterns)}
+
+=== ANIMATION EXPECTATIONS ===
+BUILD IMPRESSIVE, HIGH-DIFFICULTY ANIMATIONS. The app should feel alive and interactive:
+- At least ONE advanced animation (parallax, 3D transforms, particle effects, card swiping, scroll-reveal, magnetic interactions)
+- Scroll-triggered reveals on ALL major sections (fade + slide + scale with staggered children)
+- Smooth micro-interactions on EVERY interactive element (buttons, cards, tabs, inputs)
+- Use cubic-bezier easing for premium feel: cubic-bezier(0.16, 1, 0.3, 1) for entrances, cubic-bezier(0.4, 0, 0.2, 1) for movements
+- Spring physics for drag interactions: cubic-bezier(0.34, 1.56, 0.64, 1) for overshoot snap-back
 
 CRITICAL: All animations must use React state + inline style transitions OR Tailwind transition/hover utilities.
 NEVER write raw CSS @keyframes blocks, @property rules, or <style> tags — they break the in-browser Babel compiler.
@@ -413,6 +524,54 @@ Use var(--sb-primary) and window.__sb.color(P, opacity) for brand color consiste
 7. Hook count must be identical on every render — no conditional hooks
 8. NEVER use external image URLs (no picsum.photos, unsplash, placeholder.com, or any other image service). For image placeholders, use a colored div with a Lucide "Plus" icon centered inside (e.g. <div className="flex items-center justify-center bg-gray-100 rounded-lg" style={{height:200}}><Plus size={24} className="text-gray-400" /></div>). This creates clean, consistent placeholder areas.
 9. NEVER use <style> tags, @keyframes, @property, or any raw CSS blocks — they crash the in-browser Babel compiler. ALL animations must use inline styles with CSS transition property + React state changes, or Tailwind transition/hover utilities.
+
+=== WORKING APP SKELETON (follow this structure) ===
+
+// 1. DATA — define arrays/objects BEFORE components
+const ITEMS = [{id: 1, name: 'Example', category: 'Category', status: 'active', value: 85}, ...]; // 8-15 realistic items
+
+// 2. HELPER COMPONENTS — small, reusable
+function StatCard({label, value, icon: Icon}) {
+  return <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+    <span className="text-sm font-semibold text-gray-500 uppercase">{label}</span>
+    <div className="text-3xl font-extrabold text-gray-900 mt-2">{value}</div>
+  </div>;
+}
+
+// 3. MAIN APP — MUST define function App()
+function App() {
+  const [page, setPage] = useState('home');
+  const [items, setItems] = window.__sb.useStore('items', ITEMS);
+  const [search, setSearch] = useState('');
+  const TABS = [{id:'home', label:'Home', icon: Home}, {id:'explore', label:'Explore', icon: Search}];
+  const grad = 'linear-gradient(135deg, ' + P + ', ' + window.__sb.color(P, 0.7) + ')';
+
+  return <div className="min-h-screen bg-gray-50">
+    {/* NAV — sticky top bar, never bottom tabs */}
+    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-100">
+      <div className="w-full px-8 h-16 flex items-center">
+        <span className="text-xl font-extrabold text-gray-900 mr-8">AppName</span>
+        <div className="flex gap-2">{TABS.map(t => <button key={t.id} onClick={() => setPage(t.id)} className={cn("px-5 py-2.5 rounded-xl text-sm font-semibold", page===t.id?"text-white shadow-md":"text-gray-500 hover:bg-gray-100")} style={page===t.id?{background:grad}:undefined}><t.icon className="w-4 h-4 inline mr-1.5" />{t.label}</button>)}</div>
+      </div>
+    </nav>
+    {/* CONTENT — full-width desktop layout */}
+    <div className="w-full px-8 py-8">
+      {page === 'home' && <div className="space-y-8">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-5">
+          <StatCard label="Metric" value="128" icon={Star} />
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
+// 4. RENDER — always last line
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+CRITICAL: You MUST define function App() { ... } and the final render call. Code without function App() is BROKEN and will not render.
+VIEWPORT: DESKTOP (1200px+). Use w-full px-8, grid-cols-2/3/4 with xl: breakpoints. Top horizontal nav bar — never bottom tabs.
+GRADIENTS: Build with concatenation: 'linear-gradient(135deg, ' + P + ', ' + window.__sb.color(P, 0.7) + ')'.
+CODE SIZE: Keep total output under 12,000 characters. Build 3-5 polished sections, not 10+ mediocre ones. Max 6-8 data items. Reuse helper components — never duplicate JSX blocks. Every section tight, no filler.
 
 === THEME: ${themeStyle.toUpperCase()} ===
 ${darkMode
@@ -519,9 +678,11 @@ YOUR GOAL: Design something that looks professionally built by a design studio. 
 
 You can use Tailwind utilities and sb-* helper classes, but the result must NOT look like default Tailwind UI.
 
+SECTION LIMIT: Design exactly 4-5 sections total (including hero). Each section should be impactful — fewer, better sections beat many shallow ones.
+
 Every section must specify: background class, card type, grid layout, spacing, and purpose.
 The interaction_map must describe what every button and clickable element does.
-The component_tree must list all React components needed.
+The component_tree must list all React components needed (max 8-10 components).
 
 Be SPECIFIC and CREATIVE — no generic "modern layout" descriptions.`;
 
@@ -1261,7 +1422,7 @@ async function runTextCodeGeneration(
   }, 20000);
 
   try {
-    const maxTokens = 16000;
+    const maxTokens = 32000;
     diagLog(`[text-codegen] starting — model: ${modelId}, max_tokens: ${maxTokens}, timeout: ${timeoutMs / 1000}s`);
     diagLog(`[text-codegen] system prompt: ${systemPrompt.length} chars`);
     diagLog(`[text-codegen] user message: ${userMessage.length} chars`);
@@ -1416,10 +1577,10 @@ export async function runToolCodeGeneration(
 
   try {
     const useCacheControl = supportsCacheControl();
-    console.log(`Code gen starting — model: ${modelId}, max_tokens: 16000, timeout: ${timeoutMs / 1000}s`);
+    console.log(`Code gen starting — model: ${modelId}, max_tokens: 32000, timeout: ${timeoutMs / 1000}s`);
     const stream = client.messages.stream({
       model: modelId,
-      max_tokens: 16000,
+      max_tokens: 32000,
       temperature: 0.85,
       system: useCacheControl
         ? [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }]
@@ -1661,7 +1822,7 @@ Focus on:
     llmLog("repair", { model: modelId });
     const response = await client.messages.create({
       model: modelId,
-      max_tokens: 16000,
+      max_tokens: 32000,
       temperature: 0.5,
       system: REPAIR_SYSTEM,
       messages: [{ role: "user", content: userMessage }],
@@ -1702,6 +1863,7 @@ export async function generateReactCode(
   onProgress?: ProgressCallback,
   contextBrief?: AppContextBrief | null,
   liveComponents?: Array<{ name: string; category: string; description: string; codeHint: string }> | null,
+  templateHtmlStructure?: string | null,
 ): Promise<CodeGenerationResult | null> {
   const client = getUnifiedClient();
   const modelId = resolveModel("standard");
@@ -1709,7 +1871,7 @@ export async function generateReactCode(
 
   const themeStyle = intent.theme_style ?? 'light';
   // Select UI patterns once and use across both design architect and code gen
-  const selectedUIPatterns = selectUIPatterns(4);
+  const selectedUIPatterns = selectUIPatterns(6);
   console.log(`Selected UI patterns: ${selectedUIPatterns.map(p => p.name).join(', ')}`);
   let systemPrompt = buildCodeGenSystemPrompt(themeStyle, selectedUIPatterns);
 
@@ -1721,6 +1883,15 @@ export async function generateReactCode(
       systemPrompt += `\n\n${section}`;
       console.log(`[21st.dev] Injected ${liveComponents.length} live components into system prompt`);
     }
+  }
+
+  // Inject template HTML structure if available (from Webflow/Vercel/Netlify scraping)
+  if (templateHtmlStructure && templateHtmlStructure.length > 100) {
+    systemPrompt += `\n\n=== TEMPLATE STRUCTURE REFERENCE ===
+Adapt this HTML structure into React + Tailwind. Do NOT copy verbatim —
+use it as a structural guide for layout, sections, and component hierarchy.
+Strip any Webflow-specific classes and replace with Tailwind utilities.\n\n${templateHtmlStructure}`;
+    console.log(`[Template HTML] Injected ${templateHtmlStructure.length} chars of structural HTML into system prompt`);
   }
 
   /* ---------------------------------------------------------------- */

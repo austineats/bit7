@@ -33,6 +33,7 @@ export async function handlePlanning(ctx: PipelineContext): Promise<StateTransit
       ctx.onProgress,
       ctx.contextBrief,
       ctx.twentyFirstDevComponents,
+      ctx.templateHtmlStructure,
     );
 
     if (codeResult) {

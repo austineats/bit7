@@ -54,6 +54,8 @@ export interface PipelineContext {
 
   // Live search results (Figma Community + 21st.dev)
   twentyFirstDevComponents: UIComponentResult[] | null;
+  // Extracted HTML structure from template pages (Webflow/Vercel/Netlify)
+  templateHtmlStructure: string | null;
 
   // Design planning artifacts
   designBlueprint: unknown | null;

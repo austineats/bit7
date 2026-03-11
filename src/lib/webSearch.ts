@@ -1,10 +1,17 @@
 /**
  * Lightweight web search — finds real product URLs and descriptions
- * by scraping DuckDuckGo HTML results. No API key needed.
+ * by scraping Brave Search HTML results. No API key needed.
  *
  * Used when a user says "make an app like Ditto AI" and we need to
  * discover what Ditto AI actually is and find its real website.
+ *
+ * Also exports `extractAppCategory()` — a logic pipeline that reads
+ * the web search description to figure out the app's domain (dating,
+ * finance, fitness, etc.) so downstream searches (Figma, 21st.dev)
+ * know what to look for.
  */
+
+import { braveSearch } from "./braveSearch.js";
 
 export interface SearchResult {
   title: string;
@@ -21,70 +28,52 @@ export interface ProductSearchResult {
   results: SearchResult[];
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      redirect: "follow",
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// ─── Brave Search HTML parser ───────────────────────────────────
 
-/**
- * Parse search results from DuckDuckGo HTML lite page.
- */
-function parseDuckDuckGoResults(html: string): SearchResult[] {
+function parseBraveResults(html: string): SearchResult[] {
   const results: SearchResult[] = [];
 
-  // DuckDuckGo lite has results in a simple table structure
-  // Each result has a link and a snippet in subsequent rows
-  // Pattern: <a rel="nofollow" href="URL" class='result-link'>TITLE</a>
-  // Then: <td class="result-snippet">SNIPPET</td>
-  const linkPattern = /<a[^>]*rel="nofollow"[^>]*href="([^"]+)"[^>]*class='result-link'[^>]*>([\s\S]*?)<\/a>/gi;
-  const snippetPattern = /<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi;
+  // Brave snippet blocks: <div class="snippet svelte-..." data-pos="N" data-type="web">
+  const snippetPattern = /<div class="snippet\s+svelte-[^"]*"\s+data-pos="\d+"\s+data-type="web"[^>]*>([\s\S]*?)(?=<div class="snippet\s|<\/main>|$)/gi;
+  let snippetMatch;
 
-  const links: Array<{ url: string; title: string }> = [];
-  let match;
-  while ((match = linkPattern.exec(html)) !== null) {
-    const url = match[1];
-    const title = match[2].replace(/<[^>]+>/g, "").trim();
-    if (url && title && !url.includes("duckduckgo.com")) {
-      links.push({ url, title });
+  while ((snippetMatch = snippetPattern.exec(html)) !== null) {
+    const block = snippetMatch[1];
+
+    // URL: <a href="URL" class="...l1">
+    const urlMatch = block.match(/<a href="(https?:\/\/[^"]+)"[^>]*class="[^"]*l1"/);
+    if (!urlMatch) continue;
+    const url = urlMatch[1];
+
+    // Title: class="title..."
+    const titleMatch = block.match(/class="title[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    const title = titleMatch
+      ? titleMatch[1].replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/&amp;/g, "&").trim()
+      : "";
+
+    // Description: class="content..."
+    const descMatch = block.match(/class="content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    const snippet = descMatch
+      ? descMatch[1].replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/&amp;/g, "&").trim()
+      : "";
+
+    if (url && title) {
+      results.push({ url, title, snippet });
     }
+    if (results.length >= 8) break;
   }
 
-  const snippets: string[] = [];
-  while ((match = snippetPattern.exec(html)) !== null) {
-    snippets.push(match[1].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim());
-  }
-
-  for (let i = 0; i < links.length && i < 8; i++) {
-    results.push({
-      url: links[i].url,
-      title: links[i].title,
-      snippet: snippets[i] ?? "",
-    });
-  }
-
-  // Fallback: try simpler anchor tag matching if the above didn't work
+  // Fallback: simple anchor extraction
   if (results.length === 0) {
     const simplePattern = /<a[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     const seen = new Set<string>();
+    let match;
     while ((match = simplePattern.exec(html)) !== null) {
       const url = match[1];
       const title = match[2].replace(/<[^>]+>/g, "").trim();
       if (
         url && title && title.length > 5 &&
-        !url.includes("duckduckgo.com") &&
+        !url.includes("brave.com") &&
         !url.includes("javascript:") &&
         !seen.has(url)
       ) {
@@ -120,21 +109,12 @@ function isProductDomain(url: string): boolean {
 
 /**
  * Search the web for a product name and find its real URL + description.
- * Uses DuckDuckGo HTML search (no API key needed).
+ * Uses Brave Search HTML (no API key needed).
  */
 export async function searchForProduct(productName: string): Promise<ProductSearchResult> {
-  const query = encodeURIComponent(`${productName} app official website`);
-  const searchUrl = `https://lite.duckduckgo.com/lite/?q=${query}`;
-
   try {
-    const res = await fetchWithTimeout(searchUrl, 8000);
-    if (!res.ok) {
-      console.warn(`Web search failed: HTTP ${res.status}`);
-      return { url: null, description: "", results: [] };
-    }
-
-    const html = await res.text();
-    const results = parseDuckDuckGoResults(html);
+    const html = await braveSearch(`${productName} app official website`);
+    const results = parseBraveResults(html);
 
     if (results.length === 0) {
       console.warn(`Web search returned no results for "${productName}"`);
@@ -165,13 +145,41 @@ export async function searchForProduct(productName: string): Promise<ProductSear
   }
 }
 
+// ─── Parked domain detection ────────────────────────────────────
+
+const PARKED_SIGNALS = [
+  "for sale", "is for sale", "buy this domain", "domain is available",
+  "hugedomains", "godaddy", "sedo.com", "afternic", "dan.com",
+  "domain parking", "parked domain", "this domain may be for sale",
+  "get your very own domain", "register this domain", "domain auction",
+  "namecheap marketplace", "domain broker",
+];
+
+/**
+ * Detect if a site summary indicates a parked/for-sale domain.
+ * These are useless as product references — they tell us nothing
+ * about what the product actually is.
+ */
+export function isParkedDomain(siteSummary: string): boolean {
+  if (!siteSummary) return false;
+  const lower = siteSummary.toLowerCase();
+  return PARKED_SIGNALS.some(signal => lower.includes(signal));
+}
+
 /**
  * Also try fetching the homepage meta description and title.
  * Returns a short summary of what the site is about.
  */
 export async function fetchSiteSummary(url: string): Promise<string> {
   try {
-    const res = await fetchWithTimeout(url, 6000);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    let res: Response;
+    try {
+      res = await fetch(url, { signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; StartBox/1.0)" }, redirect: "follow" });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) return "";
 
     const html = (await res.text()).slice(0, 50000);
@@ -195,4 +203,88 @@ export async function fetchSiteSummary(url: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+// ─── Logic Pipeline: Extract App Category from Web Search Data ──
+
+/**
+ * Domain signal words — found in web search descriptions, site summaries,
+ * and snippets. These are DESCRIPTION words (what the product does),
+ * NOT product names.
+ *
+ * Example: web search for "Ditto AI" returns description containing
+ * "dating", "match", "relationship" → category = "dating"
+ */
+const CATEGORY_DOMAIN_SIGNALS: Record<string, string[]> = {
+  dating: ["dating", "date", "match", "matchmaking", "relationship", "singles", "romance", "romantic", "couples", "love", "swipe"],
+  social: ["social media", "social network", "feed", "followers", "posts", "sharing", "community platform", "stories", "timeline"],
+  chat: ["messaging", "chat", "instant message", "real-time communication", "conversations", "direct message"],
+  ecommerce: ["shopping", "ecommerce", "e-commerce", "online store", "marketplace", "products", "buy", "sell", "retail", "checkout", "cart"],
+  fitness: ["fitness", "workout", "exercise", "gym", "training", "health tracking", "calories", "steps", "running", "athletic"],
+  food: ["food delivery", "restaurant", "recipe", "meal", "cooking", "food ordering", "menu", "ingredients", "dining"],
+  finance: ["banking", "finance", "fintech", "payments", "investing", "budget", "money management", "wallet", "trading", "stocks", "crypto"],
+  productivity: ["productivity", "task management", "project management", "to-do", "kanban", "workflow", "organizer", "notes", "collaboration"],
+  education: ["education", "learning", "courses", "e-learning", "tutoring", "students", "teaching", "quiz", "study"],
+  travel: ["travel", "booking", "hotel", "flights", "vacation", "accommodation", "trip planning", "itinerary", "tourism"],
+  music: ["music", "streaming", "playlist", "audio", "podcast", "songs", "artist", "listening"],
+  dashboard: ["dashboard", "analytics", "reporting", "metrics", "data visualization", "admin panel", "monitoring"],
+  realestate: ["real estate", "property", "rental", "apartment", "house", "listing", "mortgage", "realtor"],
+  scheduling: ["scheduling", "calendar", "appointments", "booking", "availability", "meeting", "agenda", "time management", "automated scheduling"],
+  medical: ["healthcare", "medical", "telemedicine", "patient", "doctor", "clinical", "health records", "diagnosis", "prescription"],
+  news: ["news", "journalism", "articles", "media", "headlines", "newsletter", "blog", "publishing"],
+  gaming: ["gaming", "game", "esports", "multiplayer", "leaderboard", "tournament"],
+  portfolio: ["portfolio", "personal website", "landing page", "showcase"],
+  crm: ["crm", "customer relationship", "sales pipeline", "leads", "contacts", "deals"],
+  weather: ["weather", "forecast", "climate", "meteorological"],
+};
+
+/**
+ * Extract the app category from web search intelligence.
+ *
+ * This is the "logic pipeline" the system uses to figure out what kind of
+ * app the user wants. Instead of matching hardcoded product names against
+ * the raw prompt, we read the web search description + site summary to
+ * understand what the product actually IS.
+ *
+ * Example flow:
+ *   prompt: "make me an app like Ditto AI"
+ *   web search finds: "Ditto is an AI-powered dating app..."
+ *   → extractAppCategory returns "dating"
+ *   → Figma search queries become "dating app mobile"
+ *   → 21st.dev queries become "card hover", "hero gradient"
+ *
+ * @param searchDescription - combined text from web search snippets + site summary
+ * @returns the detected category string, or null if no strong signal
+ */
+export function extractAppCategory(searchDescription: string): string | null {
+  if (!searchDescription || searchDescription.length < 10) return null;
+
+  const lower = searchDescription.toLowerCase();
+  let bestCategory: string | null = null;
+  let bestScore = 0;
+
+  for (const [category, signals] of Object.entries(CATEGORY_DOMAIN_SIGNALS)) {
+    let score = 0;
+    for (const signal of signals) {
+      // Count occurrences — more mentions = stronger signal
+      const idx = lower.indexOf(signal);
+      if (idx !== -1) {
+        score += signal.includes(" ") ? 3 : 2; // multi-word signals are more specific
+        // Check for a second occurrence
+        if (lower.indexOf(signal, idx + signal.length) !== -1) score += 1;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = category;
+    }
+  }
+
+  if (bestCategory && bestScore >= 2) {
+    console.log(`[Web Search] Extracted app category "${bestCategory}" from description (score: ${bestScore})`);
+    return bestCategory;
+  }
+
+  console.log(`[Web Search] No strong category signal from description (best: ${bestCategory ?? "none"}, score: ${bestScore})`);
+  return null;
 }

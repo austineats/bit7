@@ -11,7 +11,7 @@ const reasonedIntentSchema = z.object({
   app_name_hint: z.string().min(1).transform(s => s.slice(0, 80)),
   primary_goal: z.string().min(1).transform(s => s.slice(0, 300)),
   domain: z.string().min(1).transform(s => s.slice(0, 100)),
-  reference_app: z.string().optional(),
+  reference_app: z.string().nullable().optional(),
   design_philosophy: z.string().min(1).transform(s => s.slice(0, 300)),
   target_user: z.string().min(1).transform(s => s.slice(0, 200)),
   key_differentiator: z.string().min(1).transform(s => s.slice(0, 300)),
@@ -23,7 +23,7 @@ const reasonedIntentSchema = z.object({
     icon: z.string().min(1).max(30),
     layout: z.string().min(1).max(50),
     purpose: z.string().transform(s => s.slice(0, 200)),
-  })).min(2).max(4),
+  })).min(2).max(6),
   primary_color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   theme_style: z.enum(["light", "dark", "vibrant"]),
   app_icon: z.string().min(1).max(30),
@@ -104,6 +104,8 @@ Examples:
 - "similar to Robinhood" → Robinhood is a STOCK TRADING app. Build an investment tracker with portfolio, charts, watchlists.
 NEVER ignore the referenced product. NEVER build a generic tool when the user clearly references a specific product. The referenced product tells you EXACTLY what domain, features, and UX patterns to use.
 
+IMPORTANT: If you do NOT recognize the referenced product name, look at any web search context provided below the prompt. If web search context describes the product, use that description to determine the domain. If there is NO web search context AND you don't recognize the product, use the OTHER words in the prompt to infer the domain (e.g., "fitness", "dating", "finance"). Do NOT guess a random unrelated domain — stick to what the prompt actually says.
+
 === APP NAMING ===
 Generate an ORIGINAL, INVENTED product name. One coined word is ideal.
 The name should MATCH THE DOMAIN of the referenced product (if any). Don't just pick a random techy name.
@@ -160,7 +162,7 @@ These are REQUIRED principles for every app — this is what separates professio
 - Every visual choice must be INTENTIONAL. If you can't explain why a gradient or shadow is there, remove it.
 
 === NAVIGATION ===
-Generate 2-4 tabs. Each tab's "purpose" should describe SPECIFIC UI elements to build.
+Generate 2-6 tabs. Each tab's "purpose" should describe SPECIFIC UI elements to build.
 Example: "Dashboard showing saved recipes as cards with title, cook time, difficulty. Search bar at top, category filter chips."
 
 === COLOR SELECTION ===
@@ -281,7 +283,7 @@ const toolInputSchema = {
     nav_tabs: {
       type: "array",
       minItems: 2,
-      maxItems: 4,
+      maxItems: 6,
       items: {
         type: "object",
         additionalProperties: false,
@@ -596,7 +598,7 @@ const TEXT_REASONER_JSON_TEMPLATE = `{
   "app_name_hint": "OriginalName",
   "primary_goal": "1-sentence description of the app's core purpose",
   "domain": "Product category e.g. Nutrition & Health",
-  "reference_app": "real competitor if any, or null",
+  "reference_app": "",
   "design_philosophy": "design approach",
   "target_user": "who is the primary user",
   "key_differentiator": "what makes this stand out",

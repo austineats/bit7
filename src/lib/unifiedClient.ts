@@ -218,35 +218,100 @@ export function getUnifiedClient() {
 
       /**
        * Streaming adapter — mimics Anthropic SDK's MessageStream.
-       * Since Kimi's streaming format differs, we fake it by:
-       * 1. Calling the non-streaming create endpoint
-       * 2. Emitting events on the returned EventEmitter
-       * 3. Resolving finalMessage() with the result
-       *
-       * This means progress milestones won't fire in real-time,
-       * but generation will complete successfully.
+       * Uses real OpenAI streaming (stream: true) so chunks flow back
+       * continuously and the HTTP connection stays alive for long generations.
        */
       stream: (params: CreateParams, options?: { signal?: AbortSignal }) => {
         const emitter = new EventEmitter();
         let _response: UnifiedResponse | null = null;
         let _error: Error | null = null;
-        let _aborted = false;
 
-        const promise = createImpl(params, options)
-          .then((resp) => {
-            _response = resp;
-            // Emit inputJson for tool_use responses so progress callbacks fire
-            const toolUse = resp.content.find((b) => b.type === "tool_use");
-            if (toolUse && toolUse.type === "tool_use") {
-              emitter.emit("inputJson", "", toolUse.input);
+        // Create an internal AbortController so abort() actually cancels the HTTP request
+        const internalController = new AbortController();
+
+        // If the caller passed an external signal, wire it to the internal controller
+        if (options?.signal) {
+          if (options.signal.aborted) internalController.abort();
+          else options.signal.addEventListener("abort", () => internalController.abort(), { once: true });
+        }
+
+        const model = remapModel(params.model);
+        const messages = buildMessages(params);
+        const wantsJSON = params.tools && params.tools.length > 0;
+        if (wantsJSON) {
+          injectToolSchemas(messages, params.tools!);
+        }
+
+        const promise = (async (): Promise<UnifiedResponse> => {
+          // Use real streaming so the connection stays alive during long generations
+          const stream = await openai.chat.completions.create({
+            model,
+            max_tokens: params.max_tokens,
+            temperature: sanitizeTemperature(model, params.temperature),
+            messages: messages as Array<OpenAI.ChatCompletionMessageParam>,
+            ...(wantsJSON ? { response_format: { type: "json_object" as const } } : {}),
+            stream: true,
+            stream_options: { include_usage: true },
+          }, { signal: internalController.signal });
+
+          let fullText = "";
+          let inputTokens = 0;
+          let outputTokens = 0;
+          let finishReason: string | null = null;
+          let responseId = `msg_${Date.now()}`;
+          let chunkCount = 0;
+
+          try {
+            for await (const chunk of stream) {
+              if (internalController.signal.aborted) break;
+              chunkCount++;
+              responseId = chunk.id ?? responseId;
+
+              const delta = chunk.choices[0]?.delta;
+              if (delta?.content) {
+                fullText += delta.content;
+              }
+              // Kimi thinking model sends reasoning_content in delta — skip it
+              // (we only want the final content, not the internal reasoning)
+
+              if (chunk.choices[0]?.finish_reason) {
+                finishReason = chunk.choices[0].finish_reason;
+              }
+              if (chunk.usage) {
+                inputTokens = chunk.usage.prompt_tokens ?? 0;
+                outputTokens = chunk.usage.completion_tokens ?? 0;
+              }
             }
-            return resp;
-          })
-          .catch((err) => {
-            _error = err instanceof Error ? err : new Error(String(err));
-            emitter.emit("error", _error);
-            throw _error;
-          });
+          } catch (streamErr) {
+            throw new Error(`Stream failed after ${chunkCount} chunks (${fullText.length} chars collected): ${streamErr instanceof Error ? streamErr.message : String(streamErr)}`);
+          }
+
+          // If stream completed but no content was produced, throw so retry logic kicks in
+          if (!fullText || fullText.trim().length === 0) {
+            throw new Error(`Stream completed (${chunkCount} chunks, finish=${finishReason}) but no content received — model may have only produced reasoning tokens`);
+          }
+
+          const content = parseResponseContent(fullText, !!wantsJSON, params.tools);
+          const resp: UnifiedResponse = {
+            content,
+            usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+            stop_reason: finishReason,
+            model,
+            id: responseId,
+          };
+
+          _response = resp;
+          // Emit inputJson for tool_use responses so progress callbacks fire
+          const toolUse = resp.content.find((b) => b.type === "tool_use");
+          if (toolUse && toolUse.type === "tool_use") {
+            emitter.emit("inputJson", "", toolUse.input);
+          }
+          return resp;
+        })().catch((err) => {
+          _error = err instanceof Error ? err : new Error(String(err));
+          emitter.emit("error", _error);
+          throw _error;
+        });
 
         return {
           on: (event: string, handler: (...args: unknown[]) => void) => {
@@ -254,10 +319,10 @@ export function getUnifiedClient() {
             return undefined; // match Anthropic SDK chainability
           },
           abort: () => {
-            _aborted = true;
+            internalController.abort();
           },
           finalMessage: async () => {
-            if (_aborted) throw new Error("Stream aborted");
+            if (internalController.signal.aborted) throw new Error("Stream aborted");
             await promise;
             if (_error) throw _error;
             return _response!;
