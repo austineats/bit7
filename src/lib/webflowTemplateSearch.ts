@@ -120,17 +120,17 @@ function detectCategory(prompt: string, discoveredCategory?: string | null): str
 
 // ─── Build design tokens from block code analysis ────────────────
 
-/** Neutral tokens — don't impose colors or layout. Let the reasoner/design agent decide. */
+/** Dark dramatic tokens — cinematic dark theme as default baseline. */
 function buildDesignTokens(): FigmaDesignTokens {
   return {
     colors: {
       primary: "",
       secondary: "",
       accent: "",
-      background: "#ffffff",
-      surface: "#f8fafc",
-      text: "#0f172a",
-      muted: "#64748b",
+      background: "#0a0a0f",
+      surface: "rgba(255,255,255,0.06)",
+      text: "#ffffff",
+      muted: "#a1a1aa",
       all: [],
     },
     typography: {

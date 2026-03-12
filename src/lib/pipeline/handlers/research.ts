@@ -235,9 +235,7 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
   ctx.onProgress?.({ type: "status", message: "Sourcing design templates..." });
 
   const { searchWebflowTemplates } = await import("../../webflowTemplateSearch.js");
-  const { build21stDevSearchQueries, search21stDevMulti } = await import("../../twentyFirstDevSearch.js");
-
-  const componentQueries = build21stDevSearchQueries(ctx.prompt, discoveredCategory);
+  const { search21stDevAPI } = await import("../../twentyFirstDevSearch.js");
 
   // Run both searches in parallel (both are fail-safe)
   const [figmaResult, components21st] = await Promise.all([
@@ -257,8 +255,8 @@ export async function handleResearch(ctx: PipelineContext): Promise<StateTransit
           (r) => r ? { contextOverlay: r.contextOverlay, source: `webflow: ${r.template.file_name}`, htmlStructure: r.htmlStructure ?? null } : null,
           (e) => { console.warn("[Webflow Search] Error:", e); return null; },
         ),
-    // 21st.dev: run multiple queries in parallel and merge
-    search21stDevMulti(componentQueries).catch((e) => {
+    // 21st.dev: query Supabase API directly for top components (falls back to Brave)
+    search21stDevAPI().catch((e) => {
       console.warn("[21st.dev] Search error:", e);
       return [] as import("../../twentyFirstDevSearch.js").UIComponentResult[];
     }),

@@ -662,47 +662,41 @@ function sanitizeIconDestructuring(code: string): string {
 /*  Agent Swarm: Design Architect                                      */
 /* ------------------------------------------------------------------ */
 
-const DESIGN_ARCHITECT_PROMPT = `You are an elite UI/UX architect who designs like Stripe, Linear, and Apple — not like a template marketplace. Given an app concept, produce a UNIQUE design blueprint.
+const DESIGN_ARCHITECT_PROMPT = `You are an elite visual designer who creates AWARD-WINNING, CINEMATIC web experiences. Think Awwwards, Dribbble featured, premium product launches.
 
 LANGUAGE: ALL output MUST be in English. Never output Chinese, Japanese, or any non-English text.
 
-YOUR GOAL: Design something that looks professionally built by a design studio. It should feel INTENTIONAL and PREMIUM — not AI-generated, not generic startup aesthetic.
+YOUR GOAL: Design something VISUALLY STUNNING that would win design awards. Dark, immersive, dramatic — with animated backgrounds, glass morphism, glow effects, and bold typography.
 
-=== EDITORIAL DESIGN PRINCIPLES ===
-- LIMITED COLOR PALETTE: Use 3–4 colors maximum. Apply 60-30-10 rule — 60% dominant neutral, 30% secondary, 10% accent.
-- 2 FONTS MAX: One for headings, one for body (or a single family). Build hierarchy through size/weight, not font variety.
-- CLEAN GRID: Pick a consistent spacing scale (4/8/16/24/32/48/64px) and stick to it across all sections.
-- CUSTOM COMPONENTS: Don't use obvious default shadcn/Tailwind UI patterns. Adjust border-radius, padding, shadows, and proportions to feel bespoke.
-- SUBTLE INTERACTIONS: Hover states with gentle opacity/color shifts, smooth transitions (150-200ms). No bouncing, no dramatic scaling.
-- WHITESPACE: Let content breathe. Generous padding creates a premium feel.
+=== DRAMATIC DESIGN PRINCIPLES ===
+- DARK + RICH: Dark backgrounds (linear-gradient #0a0a0f → #1a1a2e). Glass morphism cards (backdrop-blur, rgba). Glow accents.
+- HUGE HERO: 90vh+ hero section with canvas-animated smoke/particles/nebula background, gradient text (text-7xl+), shooting star streaks.
+- GLASS CARDS: Every card uses frosted glass (background: rgba(255,255,255,0.06), backdropFilter: blur(20px), glow border on hover).
+- GLOW BUTTONS: Gradient fills + boxShadow glow on hover + scale(1.05) transition. Outline variant with glass border.
+- FLOATING NAV: Glass pill navigation (rounded-full, backdrop-blur), NOT a boring top bar or bottom nav.
+- BOLD HOVER STATES: Every interactive element: scale + glow + border color shift on hover. Nothing static.
 
 === DOMAIN-DRIVEN CHOICES ===
-- Let the content and purpose determine layout, density, and color intensity. A data dashboard should feel different from a recipe browser.
-- Consider sidebars, split panels, masonry, bento grids, carousels, full-bleed sections, kanban boards — whatever fits the content.
-- For collection/browse apps: use enough sample items to fill the layout (6-10 items).
-- For tool/analyzer apps: focus on the input/output workflow, not item grids.
+- Dating: warm pink/rose smoke, swipe card stacks, heart animations
+- Fitness: neon green glow, progress rings, energy particles
+- Finance: cool blue nebula, clean data tables with glass rows, chart glows
+- Food: warm amber smoke, rich card imagery, organic glow
+- Music: purple neon, waveform animations, vinyl/disc elements
+- Gaming: electric neon, particle explosions, tilt cards
 
 === COLOR APPLICATION ===
-- NEVER default to indigo or purple — choose a primary color that fits the specific app domain
-- Apply primary color SPARINGLY as the 10% accent — CTAs, active states, key highlights
-- Use primary color tints (window.__sb.color(P, 0.08)) for subtle section backgrounds
-- Prefer flat or very subtle shadows over heavy drop shadows or glowing borders
-- Avoid gradient-heavy backgrounds — use solid colors or very subtle gradients
+- Background: ALWAYS dark gradient. NEVER bg-gray-50 or bg-white.
+- Cards: glass morphism with hover glow (boxShadow: '0 0 30px ' + color at 0.2 opacity)
+- Text: white on dark, gradient text for headlines
+- Accents: radial-gradient glows behind sections, colored shadows, gradient buttons
+- Primary color used BOLDLY — in glows, gradients, animated elements
 
-=== TYPOGRAPHY ===
-- Choose fonts that match domain tone: geometric sans for tech, humanist for consumer, serif for editorial
-- Use letter-spacing intentionally: tighter for display text, normal for body
-- No more than 3 font weights across the entire app
+SECTION LIMIT: 4-5 sections. Each must have a dramatic background effect (radial glow, gradient, particles, or glass).
+Every section must specify: background style, card type, grid layout, and visual effects.
+The interaction_map must describe what every button does (state changes, navigation, data modifications).
+The component_tree must list all React components (max 8-10).
 
-You can use Tailwind utilities and sb-* helper classes, but the result must NOT look like default Tailwind UI.
-
-SECTION LIMIT: Design exactly 4-5 sections total (including hero). Each section should be impactful — fewer, better sections beat many shallow ones.
-
-Every section must specify: background class, card type, grid layout, spacing, and purpose.
-The interaction_map must describe what every button and clickable element does.
-The component_tree must list all React components needed (max 8-10 components).
-
-Be SPECIFIC and CREATIVE — no generic "modern layout" descriptions.`;
+Be SPECIFIC about visual effects — describe exact CSS properties, not vague "modern layout" descriptions.`;
 
 const designBlueprintToolSchema = {
   type: "object" as const,
@@ -1982,7 +1976,7 @@ export async function generateReactCode(
   const modelId = resolveModel("standard");
   const fastModelId = resolveModel("fast");
 
-  const themeStyle = intent.theme_style ?? 'light';
+  const themeStyle = intent.theme_style ?? 'dark';
   // Select UI patterns once and use across both design architect and code gen
   const selectedUIPatterns = selectUIPatterns(6);
   console.log(`Selected UI patterns: ${selectedUIPatterns.map(p => p.name).join(', ')}`);

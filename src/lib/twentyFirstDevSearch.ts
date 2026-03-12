@@ -369,14 +369,129 @@ export async function search21stDevMulti(queries: string[]): Promise<UIComponent
   return merged;
 }
 
-// ─── Effect slots: WHERE in the app each effect type belongs ─────
+// ─── 21st.dev Supabase API (reverse-engineered) ─────────────────
+// Direct access to their component database — full-text search sorted by popularity.
+
+const SUPABASE_URL = "https://vucvdpamtrjkzmubwlts.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1Y3ZkcGFtdHJqa3ptdWJ3bHRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc2OTA4NDcsImV4cCI6MjA0MzI2Njg0N30.uTznS2P5CJ8NcPlBoDvJ2cV5QRZLUcCLlSntokJV40o";
+
+interface SupabaseComponent {
+  name: string;
+  code: string; // CDN URL
+  description: string;
+  downloads_count: number;
+}
+
+/**
+ * Query 21st.dev's Supabase API for components by search term.
+ * Returns top results sorted by downloads (most popular first).
+ */
+async function querySupabase(searchTerm: string, limit = 5): Promise<SupabaseComponent[]> {
+  // Convert to tsquery format: "aurora background" → "aurora & background"
+  const tsquery = searchTerm.trim().split(/\s+/).join(" & ");
+  const url = `${SUPABASE_URL}/rest/v1/components?select=name,code,description,downloads_count&fts=fts.@@.${encodeURIComponent(tsquery)}&order=downloads_count.desc&limit=${limit}&is_public=eq.true`;
+
+  try {
+    const res = await fetchWithTimeout(url, 8000);
+    if (!res.ok) return [];
+    // Supabase requires auth headers but we set them in fetchWithTimeout override below
+    return [] as SupabaseComponent[]; // handled by supabaseFetch
+  } catch {
+    return [];
+  }
+}
+
+async function supabaseFetch(searchTerm: string, limit = 5): Promise<SupabaseComponent[]> {
+  const tsquery = searchTerm.trim().split(/\s+/).join(" & ");
+  const url = `${SUPABASE_URL}/rest/v1/components?select=name,code,description,downloads_count&fts=fts.@@.${encodeURIComponent(tsquery)}&order=downloads_count.desc&limit=${limit}&is_public=eq.true`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "Accept": "application/json",
+        },
+      });
+      if (!res.ok) return [];
+      return (await res.json()) as SupabaseComponent[];
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Search 21st.dev via their Supabase API for the best components.
+ * Searches multiple categories in parallel, returns the most popular results with CDN code URLs.
+ */
+async function fetchFromSupabaseAPI(categories: string[]): Promise<UIComponentResult[]> {
+  console.log(`[21st.dev API] Querying Supabase for: ${categories.join(", ")}`);
+
+  const allResults = await Promise.all(categories.map(async (cat) => {
+    const components = await supabaseFetch(cat, 4);
+    return components.map(c => ({
+      name: c.name,
+      category: cat,
+      description: c.description?.slice(0, 300) || `${c.name} component`,
+      downloads: c.downloads_count,
+      cdnUrl: c.code,
+    }));
+  }));
+
+  // Flatten, dedupe, pick top by downloads
+  const seen = new Set<string>();
+  const merged: Array<{ name: string; category: string; description: string; downloads: number; cdnUrl: string }> = [];
+  for (const results of allResults) {
+    for (const r of results) {
+      const key = r.name.toLowerCase();
+      if (!seen.has(key) && r.cdnUrl) {
+        seen.add(key);
+        merged.push(r);
+      }
+    }
+  }
+
+  // Sort by downloads and take top components
+  merged.sort((a, b) => b.downloads - a.downloads);
+  const top = merged.slice(0, 8);
+
+  console.log(`[21st.dev API] Found ${merged.length} unique components, using top ${top.length}: ${top.map(c => `${c.name}(${c.downloads}dl)`).join(", ")}`);
+
+  // Fetch actual code from CDN in parallel
+  const results = await Promise.all(top.map(async (comp) => {
+    const code = await fetchCdnCode(comp.cdnUrl);
+    return {
+      name: comp.name,
+      category: comp.category,
+      description: comp.description,
+      codeHint: code ? `Source code:\n\`\`\`tsx\n${code}\n\`\`\`` : `${comp.name}. ${comp.description}`,
+      sourceUrl: comp.cdnUrl,
+    } satisfies UIComponentResult;
+  }));
+
+  console.log(`[21st.dev API] ${results.filter(r => r.codeHint.startsWith('Source code')).length}/${results.length} components have code`);
+  return results;
+}
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ─── Effect slots (for Brave search fallback) ─────
 
 type EffectSlot = "hero_bg" | "card_hover" | "section_reveal" | "text_effect";
 
 interface SlotConfig {
   slot: EffectSlot;
-  placement: string; // instruction for LLM on WHERE to use it
-  queries: string[]; // 21st.dev search queries for this slot
+  placement: string;
+  queries: string[];
 }
 
 const EFFECT_SLOTS: SlotConfig[] = [
@@ -385,9 +500,8 @@ const EFFECT_SLOTS: SlotConfig[] = [
     placement: "Apply to the HERO section as a full-screen immersive background",
     queries: [
       "aurora background", "particle background", "shader background",
-      "mesh gradient", "3d globe", "animated gradient background",
+      "mesh gradient", "animated gradient background",
       "spotlight hero", "interactive background", "liquid background",
-      "wave background", "orb effect", "nebula background",
     ],
   },
   {
@@ -395,17 +509,14 @@ const EFFECT_SLOTS: SlotConfig[] = [
     placement: "Apply to CARDS — interactive hover effect on each card",
     queries: [
       "3d card effect", "holographic card", "spotlight card", "tilt card",
-      "glass card", "neon card", "flip card", "interactive card",
-      "hover card effect", "card animation", "glowing card",
+      "glass card", "neon card", "glowing card",
     ],
   },
   {
     slot: "section_reveal",
-    placement: "Apply to CONTENT SECTIONS — animate elements as user scrolls or interacts",
+    placement: "Apply to CONTENT SECTIONS — animate elements as user scrolls",
     queries: [
-      "scroll animation", "parallax scroll", "staggered animation",
-      "bento grid", "masonry layout", "animated list",
-      "magnetic effect", "cursor effect", "dock navigation",
+      "scroll animation", "parallax scroll", "bento grid", "dock navigation",
     ],
   },
   {
@@ -413,22 +524,16 @@ const EFFECT_SLOTS: SlotConfig[] = [
     placement: "Apply to the HERO HEADLINE or key headings for wow factor",
     queries: [
       "text animation", "typewriter effect", "gradient text", "glitch text",
-      "text reveal", "morphing text", "scramble text", "3d text",
-      "neon text", "animated text", "text shimmer",
+      "morphing text", "text shimmer",
     ],
   },
 ];
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 export function build21stDevSearchQuery(prompt: string, discoveredCategory?: string | null): string {
   return build21stDevSearchQueries(prompt, discoveredCategory)[0];
 }
 
 export function build21stDevSearchQueries(_prompt: string, _discoveredCategory?: string | null): string[] {
-  // Pick one query from each of 3 different slots (hero_bg + card_hover + one of the others)
   const heroQuery = pickRandom(EFFECT_SLOTS[0].queries);
   const cardQuery = pickRandom(EFFECT_SLOTS[1].queries);
   const otherSlot = pickRandom(EFFECT_SLOTS.slice(2));
@@ -436,6 +541,37 @@ export function build21stDevSearchQueries(_prompt: string, _discoveredCategory?:
   const queries = [heroQuery, cardQuery, otherQuery];
   console.log(`[21st.dev] Search queries: ${queries.join(", ")}`);
   return queries;
+}
+
+/**
+ * Primary search: use 21st.dev Supabase API directly for high-quality results.
+ * Falls back to Brave search if API fails.
+ * Searches across visual categories for a balanced component set.
+ */
+export async function search21stDevAPI(): Promise<UIComponentResult[]> {
+  // Search across the most impactful visual categories
+  const categories = [
+    pickRandom(["hero", "aurora background", "animated hero", "landing hero"]),
+    pickRandom(["background", "shader background", "gradient background", "particle"]),
+    pickRandom(["glass card", "3d card", "glow card", "interactive card"]),
+    pickRandom(["text animation", "gradient text", "typewriter", "animated text"]),
+    pickRandom(["dock", "glass navigation", "liquid glass", "floating nav"]),
+  ];
+
+  try {
+    const results = await fetchFromSupabaseAPI(categories);
+    if (results.length >= 3) return results;
+  } catch (e) {
+    console.warn(`[21st.dev API] Supabase query failed, falling back to Brave:`, e instanceof Error ? e.message : e);
+  }
+
+  // Fallback to Brave search
+  const queries = [
+    pickRandom(EFFECT_SLOTS[0].queries),
+    pickRandom(EFFECT_SLOTS[1].queries),
+    pickRandom(EFFECT_SLOTS[2].queries),
+  ];
+  return search21stDevMulti(queries);
 }
 
 // ─── Effect formatting for system prompt ─────────────────────────
