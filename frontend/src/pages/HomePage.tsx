@@ -64,23 +64,6 @@ export function HomePage() {
             Text them anything — they respond instantly via SMS.
           </p>
 
-          {/* Stats */}
-          <div className="flex items-center justify-center gap-10 mb-12">
-            {[
-              { value: "< 2s", label: "Response time" },
-              { value: "99.3%", label: "Uptime" },
-              { value: "SMS", label: "Native channel" },
-            ].map((stat, i) => (
-              <div key={stat.label} className="flex items-center gap-4">
-                {i > 0 && <div className="w-px h-6 bg-zinc-200" />}
-                <div className="text-center">
-                  <p className="text-lg font-medium text-zinc-900">{stat.value}</p>
-                  <p className="text-[11px] text-zinc-400">{stat.label}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
           {/* Create form */}
           <div className="max-w-lg mx-auto">
             <form onSubmit={handleCreate}>
