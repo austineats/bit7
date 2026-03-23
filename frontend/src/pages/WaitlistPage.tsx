@@ -131,6 +131,20 @@ function FlowingWaves() {
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
 
+// ── Dots logo icon (reusable) ──
+function DotsIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 52 52">
+      {Array.from({ length: 10 }).map((_, i) => {
+        const angle = (i * 36 - 90) * (Math.PI / 180);
+        const cx = 26 + 19 * Math.cos(angle);
+        const cy = 26 + 19 * Math.sin(angle);
+        return <circle key={i} cx={cx} cy={cy} r={3.2} fill="white" />;
+      })}
+    </svg>
+  );
+}
+
 // ── Phone mockup ──
 function PhoneMockup({ example }: { example: (typeof SMS_EXAMPLES)[0] }) {
   return (
@@ -142,8 +156,8 @@ function PhoneMockup({ example }: { example: (typeof SMS_EXAMPLES)[0] }) {
         <div className="bg-[#0f0f14] rounded-[22px] overflow-hidden">
           <div className="px-3.5 pt-2.5 pb-2 border-b border-white/5">
             <div className="flex items-center justify-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center flex-shrink-0">
-                <span className="text-[9px] font-bold text-white tracking-tight">b7</span>
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#4080f0] to-[#8ab4fc] flex items-center justify-center flex-shrink-0">
+                <DotsIcon size={14} />
               </div>
               <div>
                 <p className="text-[12px] font-medium text-white leading-tight">{example.title}</p>
@@ -156,8 +170,8 @@ function PhoneMockup({ example }: { example: (typeof SMS_EXAMPLES)[0] }) {
             <div className="flex justify-start">
               <div className="bg-white/[0.07] rounded-[12px] rounded-bl-[4px] px-3 py-2.5 max-w-[88%] border border-white/[0.05]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[11px] font-bold text-white tracking-tight">b7</span>
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#4080f0] to-[#8ab4fc] flex items-center justify-center flex-shrink-0">
+                    <DotsIcon size={20} />
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold text-white leading-tight">
@@ -299,18 +313,6 @@ export function WaitlistPage() {
                 </div>
               </div>
 
-              {/* Terms */}
-              <p className="text-[12px] text-zinc-400 text-center mt-6 leading-relaxed">
-                By continuing, you agree to our{" "}
-                <span className="underline cursor-pointer hover:text-zinc-600 transition-colors">
-                  Terms of Service
-                </span>{" "}
-                and{" "}
-                <span className="underline cursor-pointer hover:text-zinc-600 transition-colors">
-                  Privacy Policy
-                </span>
-                .
-              </p>
             </div>
           </main>
         </div>
