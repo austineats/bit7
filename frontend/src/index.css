@@ -28,7 +28,7 @@
 
 @keyframes matrix-fade {
   0%, 100% { opacity: 0; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.08; }
 }
 .animate-matrix-fade {
   animation: matrix-fade ease-in-out infinite;
