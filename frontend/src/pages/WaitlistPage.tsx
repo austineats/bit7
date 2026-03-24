@@ -68,7 +68,6 @@ function MatrixBG() {
           style={{
             left: `${c.x}%`,
             top: `${c.y}%`,
-            opacity: c.opacity,
             fontSize: `${c.size}px`,
             animationDuration: `${c.duration}s`,
             animationDelay: `${c.delay}s`,
