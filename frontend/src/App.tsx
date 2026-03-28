@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { WaitlistPage } from "./pages/WaitlistPage";
+
 import { DashboardPage } from "./pages/DashboardPage";
 import { CreateAgentPage } from "./pages/CreateAgentPage";
 import { AgentPage } from "./pages/AgentPage";
@@ -14,7 +14,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<WaitlistPage />} />
+        <Route path="/" element={<BlindDatePage />} />
         <Route path="/app" element={<DashboardPage />} />
         <Route path="/create" element={<CreateAgentPage />} />
         <Route path="/agent/:id" element={<AgentPage />} />

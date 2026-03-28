@@ -139,3 +139,12 @@ blindDateRouter.get("/admin/signups", async (_req, res) => {
   });
   return res.json({ ok: true, signups });
 });
+
+blindDateRouter.delete("/admin/signups/:id", async (req, res) => {
+  try {
+    await prisma.blindDateSignup.delete({ where: { id: req.params.id } });
+    return res.json({ ok: true });
+  } catch {
+    return res.status(404).json({ ok: false, error: "not found" });
+  }
+});

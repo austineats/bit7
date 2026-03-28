@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Camera, Check, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
 
 const ETHNICITY_OPTIONS = [
