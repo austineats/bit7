@@ -151,87 +151,50 @@ function PixelStars() {
   );
 }
 
-/* ─── Phone Mockup (iPhone 16 — compact, proper aspect ratio) ─── */
+/* ─── Phone Mockup — just messages on mobile, full iPhone on desktop ─── */
 function PhoneMockup() {
   const sys = { fontFamily: '-apple-system, system-ui, sans-serif' } as const;
-  return (
-    <div className="w-[200px] sm:w-[270px] shrink-0 max-w-full">
-      {/* Outer frame — titanium edge, very thin bezel */}
-      <div
-        className="rounded-[46px] p-[3px] shadow-2xl shadow-black/60"
-        style={{ background: "linear-gradient(145deg, #4a4a4a, #2a2a2a, #3a3a3a)" }}
-      >
-        {/* Inner screen */}
-        <div className="bg-black rounded-[43px] overflow-hidden relative">
-          {/* Status bar */}
-          <div className="px-7 pt-[14px] pb-[2px] flex items-center justify-between">
-            <span className="text-[13px] font-bold text-white" style={sys}>9:41</span>
-            <div className="flex items-center gap-[5px]">
-              <svg width="15" height="11" viewBox="0 0 13 10" fill="white"><rect x="0" y="6" width="2.5" height="4" rx="0.5" opacity="0.4"/><rect x="3.5" y="4" width="2.5" height="6" rx="0.5" opacity="0.6"/><rect x="7" y="2" width="2.5" height="8" rx="0.5"/><rect x="10.5" y="0" width="2.5" height="10" rx="0.5"/></svg>
-              <svg width="15" height="11" viewBox="0 0 15 10" fill="white"><path d="M7.5 2.5C9.5 2.5 11.2 3.3 12.4 4.6L13.5 3.5C12 1.9 10 1 7.5 1S3 1.9 1.5 3.5L2.6 4.6C3.8 3.3 5.5 2.5 7.5 2.5Z"/><path d="M7.5 5C8.8 5 10 5.5 10.9 6.3L12 5.2C10.8 4.1 9.2 3.5 7.5 3.5S4.2 4.1 3 5.2L4.1 6.3C5 5.5 6.2 5 7.5 5Z"/><path d="M7.5 7.5C8.2 7.5 8.8 7.8 9.3 8.2L7.5 10L5.7 8.2C6.2 7.8 6.8 7.5 7.5 7.5Z"/></svg>
-              <svg width="22" height="11" viewBox="0 0 22 10" fill="none"><rect x="0.5" y="0.5" width="18" height="9" rx="2" stroke="white" strokeWidth="1" opacity="0.35"/><rect x="19.5" y="3" width="2" height="4" rx="1" fill="white" opacity="0.4"/><rect x="1.5" y="1.5" width="14" height="7" rx="1" fill="white"/></svg>
-            </div>
-          </div>
-          {/* Header */}
-          <div className="px-3 pb-1">
-            <div className="flex items-center gap-1">
-              <svg width="9" height="14" viewBox="0 0 10 16" fill="none"><path d="M8.5 1L1.5 8L8.5 15" stroke="#007AFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <span className="text-[13px] text-[#007AFF]" style={sys}>12</span>
-            </div>
-            <div className="flex flex-col items-center -mt-1">
-              <img src="/bubl-logo.png" className="w-8 h-8 rounded-full object-cover" alt="bubl" />
-              <p className="text-[10px] sm:text-[11px] font-semibold text-white" style={sys}>bubl</p>
-              <p className="text-[8px] sm:text-[9px] text-[#8E8E93]" style={sys}>iMessage</p>
-            </div>
-          </div>
-          {/* Messages */}
-          <div className="px-3 pb-2.5 pt-2 space-y-[5px]">
-            <div className="flex justify-start">
-              <div className="max-w-[80%] px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
-                hey eli! this is bella: I think you'd have a great time with her
-              </div>
-            </div>
-            <div className="flex justify-start">
-              <div className="max-w-[80%] px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
-                you both love fashion AND matcha!
-              </div>
-            </div>
-            <div className="flex justify-start">
-              <div className="max-w-[80%] px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
-                wanna meet her?
-              </div>
-            </div>
-            {/* Profile card — smaller */}
-            <div className="flex justify-start">
-              <div className="max-w-[65%] rounded-[12px] overflow-hidden">
-                <img src="/bubl. iphone ui.jpeg" className="w-full rounded-[12px]" alt="Bella profile card" />
-              </div>
-            </div>
-            {/* User reply — YES in blue */}
-            <div className="flex justify-end">
-              <div className="px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
-                YES
-              </div>
-            </div>
-          </div>
-          {/* Input bar */}
-          <div className="px-3 pb-3 pt-1">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-[#1C1C1E] flex items-center justify-center shrink-0">
-                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="#8E8E93" strokeWidth="1.5"/><path d="M7 4V10M4 7H10" stroke="#8E8E93" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </div>
-              <div className="flex-1 h-[30px] rounded-full border border-[#3A3A3C] flex items-center px-3">
-                <span className="text-[12px] text-[#8E8E93]" style={sys}>iMessage</span>
-              </div>
-            </div>
-          </div>
-          {/* Home indicator */}
-          <div className="flex justify-center pb-2">
-            <div className="w-[90px] h-[4px] rounded-full bg-white/20" />
-          </div>
+
+  const messages = (
+    <div className="space-y-[6px]">
+      {/* User texts bubl first */}
+      <div className="flex justify-end">
+        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
+          hey bubl i signed up!
+        </div>
+      </div>
+      {/* bubl replies */}
+      <div className="flex justify-start">
+        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
+          eli! you're locked in, get your friend to join and i'll find your match
+        </div>
+      </div>
+      {/* Profile card */}
+      <div className="flex justify-start">
+        <div className="max-w-[75%] rounded-[14px] overflow-hidden">
+          <img src="/bubl. iphone ui.jpeg" className="w-full rounded-[14px]" alt="Bella profile card" />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
+          is she bad tho
+        </div>
+      </div>
+      <div className="flex justify-start">
+        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
+          you'll have to find out thursday 👀
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* Messages only — clean, no phone frame */}
+      <div className="w-full max-w-[300px] sm:max-w-[340px] bg-black rounded-[20px] p-4 sm:p-5">
+        {messages}
+      </div>
+    </>
   );
 }
 

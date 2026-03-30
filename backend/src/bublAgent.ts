@@ -178,9 +178,14 @@ function buildSystemPrompt(
     const teammateName = isP1 ? team.player2_name : team.player1_name;
     const ready = isP1 ? team.player1_ready : team.player2_ready;
     context += `\nTeam code: ${team.code}. Status: ${team.status}.`;
-    context += teammateName ? ` Teammate: ${teammateName}.` : ` No teammate yet — they need to invite a friend.`;
-    context += ` ${firstName} is ${ready ? "READY" : "NOT READY (hasn't confirmed yet)"}.`;
-    if (team.status === "full") context += ` Both slots filled — match can happen!`;
+    if (isP1) {
+      context += ` ${firstName} CREATED this team (they're the host).`;
+      context += teammateName ? ` Their friend ${teammateName} joined.` : ` No teammate yet — they need to invite a friend.`;
+    } else {
+      context += ` ${firstName} was INVITED to join by ${team.player1_name}. They joined ${team.player1_name}'s team.`;
+    }
+    context += ` ${firstName} is ${ready ? "READY" : "NOT READY (hasn't texted to confirm yet)"}.`;
+    if (team.status === "full") context += ` Both slots filled — match can happen once both ready up!`;
   }
   if (!user) {
     context += `\nThis person is NOT signed up. They need to go to bubl.buzz to join.`;
@@ -297,8 +302,20 @@ async function processMessages(sender: string) {
   // Check for ready-up trigger
   const lower = combinedText.toLowerCase();
   if (user && (lower.includes("signed up") || lower.includes("ive signed up") || lower.includes("i've signed up") || lower.includes("i signed up"))) {
-    await markReady(sender);
+    const updatedTeam = await markReady(sender);
     logActivity("ready_up", firstName || undefined, normalizePhone(sender), `Team: ${team?.code || "none"}`);
+
+    // Notify teammate that this person readied up
+    if (updatedTeam) {
+      const normalized = normalizePhone(sender);
+      const isP1 = updatedTeam.player1_phone === normalized;
+      const teammatePhone = isP1 ? updatedTeam.player2_phone : updatedTeam.player1_phone;
+      if (teammatePhone) {
+        const { IMessageSDK } = await import("@photon-ai/imessage-kit");
+        const notifySdk = new IMessageSDK();
+        notifySdk.send(teammatePhone, `${firstName} just readied up, you're both locked in`).catch(() => {});
+      }
+    }
   }
 
   // Generate LLM reply

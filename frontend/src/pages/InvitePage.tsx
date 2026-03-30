@@ -35,14 +35,14 @@ const BOY_NAMES = [
 
 
 /* ─── Player slot ─── */
-function PixelPlayer({ name, filled, color, ready, onInvite }: { name?: string; filled: boolean; color: "blue" | "pink"; ready?: boolean; onInvite?: () => void }) {
+function PixelPlayer({ name, filled, color, ready, onInvite, inviteCopied }: { name?: string; filled: boolean; color: "blue" | "pink"; ready?: boolean; onInvite?: () => void; inviteCopied?: boolean }) {
   const c = color === "blue" ? "#29adff" : "#ff77a8";
   const cDark = color === "blue" ? "#1a6b99" : "#993d64";
 
   return (
-    <div className="flex flex-col items-center gap-3 w-[100px] sm:w-[140px]">
+    <div className="flex flex-col items-center gap-2 sm:gap-3 w-[100px] sm:w-[140px]">
       <div
-        className="w-full aspect-[3/4] flex items-center justify-center"
+        className="w-full aspect-[3/4] flex items-center justify-center p-2"
         style={{
           border: `4px solid ${filled ? c : "#5f574f"}`,
           borderStyle: filled ? "solid" : "dashed",
@@ -52,17 +52,22 @@ function PixelPlayer({ name, filled, color, ready, onInvite }: { name?: string; 
       >
         {filled ? (
           ready ? (
-            <span className="text-[14px] sm:text-[16px] text-[#00e436]">READY</span>
+            <span className="text-[11px] sm:text-[16px] text-[#00e436]">READY</span>
           ) : (
-            <span className="text-[10px] sm:text-[12px] text-[#ffec27]" style={{ animation: "blink-pixel 2s step-end infinite" }}>NOT READY</span>
+            <span className="text-[8px] sm:text-[11px] text-[#ffec27]" style={{ animation: "blink-pixel 2s step-end infinite" }}>NOT READY</span>
           )
         ) : (
           <button
             onClick={onInvite}
-            className="px-4 py-2 text-[9px] sm:text-[10px] active:translate-y-[2px]"
-            style={{ border: `4px solid ${c}`, background: c, color: "#1d2b53", boxShadow: `3px 3px 0 ${cDark}` }}
+            className="px-2 sm:px-4 py-1.5 sm:py-2 text-[6px] sm:text-[9px] active:translate-y-[2px]"
+            style={{
+              border: `3px solid ${inviteCopied ? "#00e436" : c}`,
+              background: inviteCopied ? "#00e436" : c,
+              color: "#1d2b53",
+              boxShadow: `2px 2px 0 ${inviteCopied ? "#008751" : cDark}`,
+            }}
           >
-            INVITE
+            {inviteCopied ? "COPIED!" : "INVITE"}
           </button>
         )}
       </div>
@@ -243,7 +248,7 @@ export function InvitePage() {
             <p className="text-[#ff77a8] text-[9px] sm:text-[10px] mb-3">&lt; DOUBLE DATE MODE &gt;</p>
             <h1 className="text-[16px] sm:text-[28px] lg:text-[34px] text-[#fff1e8] leading-[1.6]">
               {teamFull ? (
-                <>Team <span className="text-[#00e436]">ready!</span></>
+                <span className="text-[#ffec27]">ready up</span>
               ) : (
                 <>Invite ur<br /><span className="text-[#ffec27]">teammate</span></>
               )}
@@ -270,7 +275,7 @@ export function InvitePage() {
               {teamFull ? (
                 <PixelPlayer name={team.player2!.name} filled ready={team.player2!.ready} color={isFemale ? "pink" : "blue"} />
               ) : (
-                <PixelPlayer filled={false} color={isFemale ? "pink" : "blue"} onInvite={copyLink} />
+                <PixelPlayer filled={false} color={isFemale ? "pink" : "blue"} onInvite={copyLink} inviteCopied={copied} />
               )}
             </div>
 
