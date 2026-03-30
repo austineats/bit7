@@ -29,49 +29,17 @@ const API = import.meta.env.VITE_API_URL || "";
 
 // Classic restroom sign silhouettes
 function MaleIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg viewBox="0 0 100 260" fill="currentColor" className={className} style={style}>
-      {/* Head */}
-      <circle cx="50" cy="22" r="18" />
-      {/* Left arm */}
-      <rect x="2" y="52" width="14" height="72" rx="7" transform="rotate(-12 9 52)" />
-      {/* Right arm */}
-      <rect x="84" y="52" width="14" height="72" rx="7" transform="rotate(12 91 52)" />
-      {/* Body */}
-      <rect x="30" y="50" width="40" height="90" rx="3" />
-      {/* Left leg */}
-      <rect x="31" y="132" width="16" height="100" rx="8" />
-      {/* Right leg */}
-      <rect x="53" y="132" width="16" height="100" rx="8" />
-    </svg>
-  );
+  return <img src="/male-icon.svg" alt="guy" className={className} style={style} />;
 }
 
 function FemaleIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg viewBox="0 0 100 260" fill="currentColor" className={className} style={style}>
-      {/* Head */}
-      <circle cx="50" cy="22" r="18" />
-      {/* Left arm */}
-      <rect x="2" y="52" width="14" height="72" rx="7" transform="rotate(-12 9 52)" />
-      {/* Right arm */}
-      <rect x="84" y="52" width="14" height="72" rx="7" transform="rotate(12 91 52)" />
-      {/* Upper body */}
-      <rect x="33" y="50" width="34" height="44" rx="3" />
-      {/* Skirt with V cutout for legs */}
-      <path d="M50,88 L88,170 L64,170 L50,135 L36,170 L12,170 Z" />
-      {/* Left leg */}
-      <rect x="29" y="162" width="16" height="72" rx="8" />
-      {/* Right leg */}
-      <rect x="55" y="162" width="16" height="72" rx="8" />
-    </svg>
-  );
+  return <img src="/female-icon.svg" alt="girl" className={className} style={style} />;
 }
 
 function SlotCard({ slot, onJoin, blurred, mystery }: { slot: Slot; onJoin: () => void; blurred?: boolean; mystery?: boolean }) {
   const isGuy = slot.role === "guy";
-  const accent = isGuy ? "#3b82f6" : "#ec4899";
-  const accentMid = isGuy ? "rgba(59,130,246,0.3)" : "rgba(236,72,153,0.3)";
+  const accent = isGuy ? "#2196F3" : "#FF1493";
+  const accentMid = isGuy ? "rgba(33,150,243,0.3)" : "rgba(255,20,147,0.3)";
 
   return (
     <motion.div
@@ -99,15 +67,15 @@ function SlotCard({ slot, onJoin, blurred, mystery }: { slot: Slot; onJoin: () =
           blurred ? (
             <>
               {isGuy
-                ? <MaleIcon className="w-16 sm:w-20 mb-2" style={{ color: "rgba(255,255,255,0.08)", filter: "blur(6px)" }} />
-                : <FemaleIcon className="w-16 sm:w-20 mb-2" style={{ color: "rgba(255,255,255,0.08)", filter: "blur(6px)" }} />
+                ? <MaleIcon className="w-16 sm:w-20 mb-2" style={{ opacity: 0.15, filter: "blur(6px)" }} />
+                : <FemaleIcon className="w-16 sm:w-20 mb-2" style={{ opacity: 0.15, filter: "blur(6px)" }} />
               }
             </>
           ) : (
             <>
               {isGuy
-                ? <MaleIcon className="w-16 sm:w-20 mb-2" style={{ color: accent, filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.3))" }} />
-                : <FemaleIcon className="w-16 sm:w-20 mb-2" style={{ color: accent, filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.3))" }} />
+                ? <MaleIcon className="w-16 sm:w-20 mb-2" style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.3))" }} />
+                : <FemaleIcon className="w-16 sm:w-20 mb-2" style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.3))" }} />
               }
               <div className="px-3 py-1 rounded text-[10px] font-bold uppercase tracking-[0.2em] mb-1" style={{ background: accentMid, color: accent }}>
                 ready
@@ -117,8 +85,8 @@ function SlotCard({ slot, onJoin, blurred, mystery }: { slot: Slot; onJoin: () =
         ) : mystery ? (
           <>
             {isGuy
-              ? <MaleIcon className="w-14 sm:w-18" style={{ color: "rgba(255,255,255,0.06)", filter: "blur(5px)" }} />
-              : <FemaleIcon className="w-14 sm:w-18" style={{ color: "rgba(255,255,255,0.06)", filter: "blur(5px)" }} />
+              ? <MaleIcon className="w-14 sm:w-18" style={{ opacity: 0.1, filter: "blur(5px)" }} />
+              : <FemaleIcon className="w-14 sm:w-18" style={{ opacity: 0.1, filter: "blur(5px)" }} />
             }
           </>
         ) : (

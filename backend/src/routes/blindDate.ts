@@ -77,6 +77,29 @@ blindDateRouter.post("/signup", upload.none(), async (req, res) => {
 
     console.log(`[BlindDate] New signup: ${name} (${normalized}), position #${position}`);
 
+    // Auto-create BublProfile so admin has full data
+    const parsedAge = age ? parseInt(age, 10) : null;
+    prisma.bublProfile.upsert({
+      where: { phone: normalized },
+      update: {
+        name: name.trim(),
+        ...(parsedAge && !isNaN(parsedAge) ? { age: parsedAge } : {}),
+        ...(gender ? { gender } : {}),
+        ...(looking_for ? { looking_for } : {}),
+        ...(school ? { school } : {}),
+        interests: parsedHobbies,
+      },
+      create: {
+        phone: normalized,
+        name: name.trim(),
+        age: parsedAge && !isNaN(parsedAge) ? parsedAge : null,
+        gender: gender || null,
+        looking_for: looking_for || null,
+        school: school || null,
+        interests: parsedHobbies,
+      },
+    }).catch(err => console.warn("[BlindDate] Profile auto-create failed:", err));
+
     // Push to Google Sheet (fire-and-forget)
     const sheetWebhook = process.env.GOOGLE_SHEET_WEBHOOK;
     if (sheetWebhook) {
@@ -132,8 +155,59 @@ blindDateRouter.get("/admin/signups", async (_req, res) => {
   const signups = await prisma.blindDateSignup.findMany({
     orderBy: { created_at: "desc" },
     take: 500,
+    include: { match: true },
   });
-  return res.json({ ok: true, signups });
+
+  // Enrich with profile, conversation history, and user state
+  const phones = signups.map(s => s.phone);
+
+  const [profiles, conversations, userStates, partySlots] = await Promise.all([
+    prisma.bublProfile.findMany({ where: { phone: { in: phones } } }),
+    prisma.conversation.findMany({
+      where: { user_phone: { in: phones } },
+      orderBy: { created_at: "desc" },
+      take: 2000,
+    }),
+    prisma.userState.findMany({
+      where: { user_phone: { in: phones } },
+    }),
+    prisma.partySlot.findMany({
+      where: { phone: { in: phones }, filled: true },
+      include: {
+        party: {
+          include: { slots: true },
+        },
+      },
+    }),
+  ]);
+
+  const profileMap = Object.fromEntries(profiles.map(p => [p.phone, p]));
+  const convoMap: Record<string, typeof conversations> = {};
+  for (const c of conversations) {
+    (convoMap[c.user_phone] ??= []).push(c);
+  }
+  const stateMap = Object.fromEntries(userStates.map(s => [s.user_phone, s]));
+
+  // Build party info per phone: their party, their role, and teammate
+  const partyMap: Record<string, { party: typeof partySlots[0]["party"]; slot: typeof partySlots[0]; teammate: typeof partySlots[0] | null }> = {};
+  for (const ps of partySlots) {
+    const sameRoleSlots = ps.party.slots.filter(s => s.role === ps.role && s.id !== ps.id);
+    partyMap[ps.phone!] = {
+      party: ps.party,
+      slot: ps,
+      teammate: sameRoleSlots.find(s => s.filled) || null,
+    };
+  }
+
+  const enriched = signups.map(s => ({
+    ...s,
+    profile: profileMap[s.phone] || null,
+    conversations: convoMap[s.phone] || [],
+    user_state: stateMap[s.phone] || null,
+    party_info: partyMap[s.phone] || null,
+  }));
+
+  return res.json({ ok: true, signups: enriched });
 });
 
 blindDateRouter.delete("/admin/signups/:id", async (req, res) => {
