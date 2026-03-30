@@ -60,6 +60,9 @@ export function JoinPage() {
       setError("all fields required!");
       return;
     }
+    const ageNum = parseInt(age);
+    if (isNaN(ageNum) || ageNum < 13) { setError("you must be at least 13"); return; }
+    if (ageNum > 18) { setError("bubl is for high schoolers only (13-18)"); return; }
     setFormState("submitting");
     const fd = new FormData();
     fd.append("name", name.trim());
@@ -159,7 +162,7 @@ export function JoinPage() {
                     className={inputClass} style={px}
                   />
                   <PixelSelect value={gender} onChange={setGender} placeholder="&gt; gender"
-                    options={[{ value: "boy", label: "Boy" }, { value: "girl", label: "Girl" }]} />
+                    options={[{ value: "male", label: "Male" }, { value: "female", label: "Female" }]} />
                   <PixelSelect value={school} onChange={setSchool} placeholder="&gt; school"
                     options={[
                       { value: "Portola High School", label: "Portola High School" },

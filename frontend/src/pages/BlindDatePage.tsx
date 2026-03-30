@@ -285,6 +285,9 @@ export function BlindDatePage() {
   const submit = async () => {
     setError("");
     if (!name.trim() || !phone.trim() || !age.trim() || !gender || !school) { setError("all fields required!"); return; }
+    const ageNum = parseInt(age);
+    if (isNaN(ageNum) || ageNum < 13) { setError("you must be at least 13"); return; }
+    if (ageNum > 18) { setError("bubl is for high schoolers only (13-18)"); return; }
     setFormState("submitting");
     const fd = new FormData();
     fd.append("name", name.trim());
@@ -675,7 +678,7 @@ export function BlindDatePage() {
                     value={gender}
                     onChange={setGender}
                     placeholder="&gt; gender"
-                    options={[{ value: "boy", label: "Boy" }, { value: "girl", label: "Girl" }]}
+                    options={[{ value: "male", label: "Male" }, { value: "female", label: "Female" }]}
                   />
                   <input
                     type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="&gt; age"

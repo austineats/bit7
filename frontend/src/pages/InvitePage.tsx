@@ -153,14 +153,15 @@ export function InvitePage() {
   const initial = stored ? JSON.parse(stored) : null;
 
   const [team, setTeam] = useState<TeamData>({
-    player1: initial ? { name: initial.name, gender: initial.gender || "boy", ready: false } : { name: "...", gender: "boy", ready: false },
+    player1: initial ? { name: initial.name, gender: initial.gender || "male", ready: false } : { name: "...", gender: "male", ready: false },
     player2: null,
   });
   const [copied, setCopied] = useState(false);
   const [loaded, setLoaded] = useState(!!initial);
 
   const playerGender = team.player1.gender;
-  const matchGender = playerGender === "girl" ? "boy" : "girl";
+  const isFemale = playerGender === "girl" || playerGender === "female";
+  const matchGender = isFemale ? "boy" : "girl";
   const teamFull = team.player2 !== null;
   const playerCount = teamFull ? 2 : 1;
 
@@ -265,11 +266,11 @@ export function InvitePage() {
           {/* 2v2 Arena */}
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 lg:gap-8">
             <div className="flex gap-4 sm:gap-5">
-              <PixelPlayer name={team.player1.name} filled ready={team.player1.ready} color={playerGender === "girl" ? "pink" : "blue"} />
+              <PixelPlayer name={team.player1.name} filled ready={team.player1.ready} color={isFemale ? "pink" : "blue"} />
               {teamFull ? (
-                <PixelPlayer name={team.player2!.name} filled ready={team.player2!.ready} color={playerGender === "girl" ? "pink" : "blue"} />
+                <PixelPlayer name={team.player2!.name} filled ready={team.player2!.ready} color={isFemale ? "pink" : "blue"} />
               ) : (
-                <PixelPlayer filled={false} color={playerGender === "girl" ? "pink" : "blue"} onInvite={copyLink} />
+                <PixelPlayer filled={false} color={isFemale ? "pink" : "blue"} onInvite={copyLink} />
               )}
             </div>
 
