@@ -229,6 +229,35 @@ blindDateRouter.delete("/admin/signups/:id", async (req, res) => {
   }
 });
 
+blindDateRouter.delete("/admin/teams/:id", async (req, res) => {
+  try {
+    const team = await prisma.blindDateTeam.findUnique({ where: { id: req.params.id } });
+    await prisma.blindDateTeam.delete({ where: { id: req.params.id } });
+    logActivity("admin_delete", undefined, undefined, `Deleted team ${team?.code || req.params.id}`);
+    return res.json({ ok: true });
+  } catch {
+    return res.status(404).json({ ok: false, error: "not found" });
+  }
+});
+
+blindDateRouter.delete("/admin/activity/:id", async (req, res) => {
+  try {
+    await prisma.adminActivityLog.delete({ where: { id: req.params.id } });
+    return res.json({ ok: true });
+  } catch {
+    return res.status(404).json({ ok: false, error: "not found" });
+  }
+});
+
+blindDateRouter.delete("/admin/visits/:id", async (req, res) => {
+  try {
+    await prisma.siteAnalytics.delete({ where: { id: req.params.id } });
+    return res.json({ ok: true });
+  } catch {
+    return res.status(404).json({ ok: false, error: "not found" });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // GET /admin/teams — all teams for admin dashboard
 // ---------------------------------------------------------------------------

@@ -156,10 +156,27 @@ export function AdminPage() {
   }
 
   async function removeUser(id: string) {
-    if (!confirm("Remove?")) return;
+    if (!confirm("Remove user?")) return;
     await fetch(`/api/blind-date/admin/signups/${id}`, { method: "DELETE" }).catch(() => {});
     setSignups(p => p.filter(s => s.id !== id));
     if (selectedUser?.id === id) setSelectedUser(null);
+  }
+
+  async function removeTeam(id: string) {
+    if (!confirm("Remove team?")) return;
+    await fetch(`/api/blind-date/admin/teams/${id}`, { method: "DELETE" }).catch(() => {});
+    setTeams(p => p.filter(t => t.id !== id));
+    if (selectedTeam?.id === id) setSelectedTeam(null);
+  }
+
+  async function removeLog(id: string) {
+    await fetch(`/api/blind-date/admin/activity/${id}`, { method: "DELETE" }).catch(() => {});
+    setActivity(p => p.filter(a => a.id !== id));
+  }
+
+  async function removeVisit(id: string) {
+    await fetch(`/api/blind-date/admin/visits/${id}`, { method: "DELETE" }).catch(() => {});
+    setVisits(p => p.filter(v => v.id !== id));
   }
 
   // ── Derived data ──
@@ -313,7 +330,8 @@ export function AdminPage() {
                 activity.map(a => {
                   const c = ACTION_COLORS[a.action] || "#5f574f";
                   return (
-                    <div key={a.id} className="px-3 py-2.5 border-b-2 border-[#1d2b53]">
+                    <div key={a.id} className="px-3 py-2.5 border-b-2 border-[#1d2b53] group relative">
+                      <button onClick={() => removeLog(a.id)} className="absolute top-2 right-2 text-[#ff004d]/0 group-hover:text-[#ff004d]/60 hover:!text-[#ff004d] text-[10px]">&times;</button>
                       <div className="flex items-center justify-between mb-1">
                         <Badge text={a.action.replace(/_/g, " ").toUpperCase()} color={c} />
                         <span className="text-[#c2c3c7]/30 text-[5px]">{timeAgo(a.created_at)}</span>
@@ -329,7 +347,8 @@ export function AdminPage() {
             ) : tab === "visits" ? (
               filteredVisits.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO VISITS</p> : (
                 filteredVisits.map(v => (
-                  <div key={v.id} className="px-3 py-2 border-b-2 border-[#1d2b53]">
+                  <div key={v.id} className="px-3 py-2 border-b-2 border-[#1d2b53] group relative">
+                    <button onClick={() => removeVisit(v.id)} className="absolute top-1.5 right-2 text-[#ff004d]/0 group-hover:text-[#ff004d]/60 hover:!text-[#ff004d] text-[10px]">&times;</button>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[#00e436] text-[7px]">{v.path || "/"}</span>
                       <span className="text-[#c2c3c7]/30 text-[5px]">{timeAgo(v.created_at)}</span>
@@ -423,6 +442,10 @@ export function AdminPage() {
                   ) : <span className="text-[8px] text-[#5f574f]">WAITING FOR INVITE</span>}
                 </Row>
                 <Row label="CREATED"><span className="text-[7px] text-[#c2c3c7]">{new Date(selectedTeam.created_at).toLocaleString()}</span></Row>
+                <button onClick={() => removeTeam(selectedTeam.id)}
+                  className="w-full py-3 border-4 border-[#ff004d] bg-[#ff004d]/10 text-[#ff004d] text-[8px] hover:bg-[#ff004d]/25 mt-2">
+                  REMOVE TEAM
+                </button>
               </div>
             </div>
 
