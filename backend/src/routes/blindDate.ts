@@ -98,6 +98,7 @@ blindDateRouter.post("/signup", upload.none(), async (req, res) => {
       data: {
         name: name.trim(),
         phone: normalized,
+        age: age || null,
         school_id_url: school || null,
         gender: gender || null,
         looking_for: looking_for || null,

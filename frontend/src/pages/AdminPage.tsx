@@ -5,12 +5,14 @@ interface Signup {
   id: string;
   name: string;
   phone: string;
+  age?: string;
   gender?: string;
   looking_for?: string;
   hobbies: string[];
   status: string;
   school_id_url?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 interface Team {
@@ -271,6 +273,9 @@ export function AdminPage() {
                   }`} style={px}>{selected.status.toUpperCase()}</span>
                 } />
                 <ProfileRow label="GENDER" value={<span className="text-[#fff1e8]/70 text-[9px]" style={px}>{selected.gender || "---"}</span>} />
+                <ProfileRow label="AGE" value={<span className="text-[#fff1e8]/70 text-[9px]" style={px}>{selected.age || "---"}</span>} />
+                <ProfileRow label="SCHOOL" value={<span className="text-[#fff1e8]/70 text-[9px]" style={px}>{selected.school_id_url || "---"}</span>} />
+                <ProfileRow label="PHONE" value={<span className="text-[#fff1e8]/70 text-[9px]" style={px}>{selected.phone}</span>} />
                 <ProfileRow label="LOOKING FOR" value={<span className="text-[#fff1e8]/70 text-[9px]" style={px}>{selected.looking_for || "---"}</span>} />
                 <ProfileRow label="HOBBIES" value={
                   Array.isArray(selected.hobbies) && selected.hobbies.length > 0 ? (
@@ -280,6 +285,28 @@ export function AdminPage() {
                       ))}
                     </div>
                   ) : <span className="text-[#c2c3c7] text-[9px]" style={px}>---</span>
+                } />
+                <ProfileRow label="TEAM" value={
+                  (() => {
+                    const team = teams.find(t => t.player1_phone === selected.phone || t.player2_phone === selected.phone);
+                    if (!team) return <span className="text-[#c2c3c7] text-[9px]" style={px}>NO TEAM</span>;
+                    const isP1 = team.player1_phone === selected.phone;
+                    const teammate = isP1 ? team.player2_name : team.player1_name;
+                    const ready = isP1 ? team.player1_ready : team.player2_ready;
+                    return (
+                      <div className="space-y-1">
+                        <span className="text-[#29adff] text-[9px]" style={px}>CODE: {team.code}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 ${ready ? "bg-[#00e436]" : "bg-[#ffec27]"}`} />
+                          <span className="text-[#fff1e8]/70 text-[8px]" style={px}>{ready ? "READY" : "NOT READY"}</span>
+                        </div>
+                        <span className="text-[#fff1e8]/70 text-[8px]" style={px}>TEAMMATE: {teammate || "NONE"}</span>
+                        <span className={`text-[8px] px-2 py-1 border-2 inline-block ${
+                          team.status === "full" ? "border-[#00e436] text-[#00e436]" : "border-[#ffec27] text-[#ffec27]"
+                        }`} style={px}>{team.status.toUpperCase()}</span>
+                      </div>
+                    );
+                  })()
                 } />
                 <ProfileRow label="SIGNED UP" value={
                   <span className="text-[#c2c3c7] text-[8px]" style={px}>{new Date(selected.created_at).toLocaleString()}</span>

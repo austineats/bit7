@@ -186,8 +186,9 @@ model BlindDateSignup {
   id            String    @id @default(uuid())
   name          String
   phone         String    @unique
-  school_id_url String                // base64 or URL of school ID photo
-  gender        String?               // "male" | "female" | "nonbinary"
+  age           String?               // "14" - "18"
+  school_id_url String                // school name
+  gender        String?               // "male" | "female"
   looking_for   String?               // "male" | "female" | "everyone"
   hobbies       Json      @default("[]") // array of strings
   status        String    @default("waiting") // "waiting" | "matched" | "archived"
