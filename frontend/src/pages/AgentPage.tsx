@@ -88,7 +88,7 @@ export function AgentPage() {
             <ArrowLeft className="w-4 h-4 text-zinc-400" />
           </button>
           <div className="w-px h-4 bg-zinc-200" />
-          <span className="text-sm font-medium">bit7</span>
+          <span className="text-sm font-medium">bubl.</span>
           <ChevronRight className="w-3 h-3 text-zinc-300" />
           <span className="text-[13px] text-zinc-500 truncate">{agent.name}</span>
         </div>

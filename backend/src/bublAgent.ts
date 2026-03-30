@@ -6,24 +6,81 @@ import { sendContactCard } from "./lib/imessage/contactCard.js";
 const sdk = new IMessageSDK();
 const TYPING_URL = process.env.TYPING_URL ?? "http://localhost:5055";
 
-// Per-user conversation history with message tracking
-type ChatMessage = { role: "user" | "assistant"; content: string; timestamp: number };
-const conversations = new Map<string, ChatMessage[]>();
-const sentCard = new Set<string>();
+// In-memory cache backed by DB
+const historyCache = new Map<string, { role: "user" | "assistant"; content: string }[]>();
+const cardSentCache = new Set<string>();
 
 // Debounce — wait for user to stop typing before replying (catches multi-text bursts)
 const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingMessages = new Map<string, { texts: string[]; lastMsg: Message }>();
 
-const REPLY_DELAY = 1200; // ms to wait after last message before replying
+const REPLY_DELAY = 1200;
 const MAX_HISTORY = 30;
+
+// ─── Persistent history ───
+
+async function loadHistory(phone: string): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  if (historyCache.has(phone)) return historyCache.get(phone)!;
+  try {
+    const rows = await prisma.bublChatHistory.findMany({
+      where: { phone },
+      orderBy: { created_at: "asc" },
+      take: MAX_HISTORY,
+    });
+    const history = rows.map(r => ({ role: r.role as "user" | "assistant", content: r.content }));
+    historyCache.set(phone, history);
+    return history;
+  } catch { return []; }
+}
+
+async function saveMessage(phone: string, role: "user" | "assistant", content: string) {
+  try {
+    await prisma.bublChatHistory.create({ data: { phone, role, content } });
+    // Update cache
+    const history = historyCache.get(phone) || [];
+    history.push({ role, content });
+    if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+    historyCache.set(phone, history);
+    // Trim old DB rows (keep last 50)
+    const count = await prisma.bublChatHistory.count({ where: { phone } });
+    if (count > 50) {
+      const oldest = await prisma.bublChatHistory.findMany({
+        where: { phone },
+        orderBy: { created_at: "asc" },
+        take: count - 50,
+        select: { id: true },
+      });
+      await prisma.bublChatHistory.deleteMany({ where: { id: { in: oldest.map(r => r.id) } } });
+    }
+  } catch {}
+}
+
+async function hasReceivedCard(phone: string): Promise<boolean> {
+  if (cardSentCache.has(phone)) return true;
+  try {
+    const record = await prisma.bublContactSent.findUnique({ where: { phone } });
+    if (record) { cardSentCache.add(phone); return true; }
+    return false;
+  } catch { return false; }
+}
+
+async function markCardSent(phone: string) {
+  cardSentCache.add(phone);
+  try {
+    await prisma.bublContactSent.upsert({
+      where: { phone },
+      create: { phone },
+      update: {},
+    });
+  } catch {}
+}
 
 // ─── LLM client ───
 
 function getLLM(): OpenAI {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (anthropicKey) {
-    return new OpenAI({ apiKey: anthropicKey, baseURL: "https://api.anthropic.com/v1/" });
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    return new OpenAI({ apiKey: openaiKey });
   }
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
@@ -32,11 +89,11 @@ function getLLM(): OpenAI {
       baseURL: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
     });
   }
-  throw new Error("No LLM API key (ANTHROPIC_API_KEY or GEMINI_API_KEY)");
+  throw new Error("No LLM API key (OPENAI_API_KEY or GEMINI_API_KEY)");
 }
 
 function getModel(): string {
-  if (process.env.ANTHROPIC_API_KEY) return "claude-haiku-4-5-20251001";
+  if (process.env.OPENAI_API_KEY) return "gpt-4o-mini";
   return "gemini-flash-lite-latest";
 }
 
@@ -132,13 +189,15 @@ function buildSystemPrompt(
   return `You are bubl — a friendly Gen-Z matchmaker that sets up double dates every Thursday via iMessage.
 
 HOW YOU TEXT:
-- Like a close friend: casual, warm, hyped, supportive
-- Lowercase, abbreviations, emojis (💜 👀 🔥 😭 🫶 ✨), slang
-- SHORT — 1-2 sentences max. This is iMessage not email
-- Playful, teasing, fun. Never robotic or corporate
-- Use their name naturally (not every message)
-- Match their energy and vibe
-- If they sent multiple texts in a row, address all of them in one cohesive reply
+- Like a real friend who's genuinely funny. Not a brand. Not corporate. A real person
+- Lowercase always. Use "fr", "tho", "bro", "nah", "lowkey" naturally
+- If someone says something weird or funny, PLAY ALONG and roast them, then redirect
+- Max 1 emoji per message, usually 😭 or 😂 when something's actually funny. Most messages zero emoji
+- Never be cringe or try-hard. If you're not sure if something's funny, just be straight up
+- Short punchy sentences. No filler words. No "oh my gosh!" energy
+- Match their vibe — if they're being chaotic at 3am, match that energy
+- Use their name sparingly, not every message
+- Always steer back to getting them to complete signup/onboarding/invite their friend after the joke
 
 HOW BUBL WORKS:
 - Sign up with a friend (teammate) for double dates
@@ -157,8 +216,17 @@ RULES:
 - If teammate hasn't joined, remind them to share the invite
 - Never say "I'm an AI/bot" — you ARE bubl, a matchmaker
 - NEVER repeat the same response you already sent
-- Keep replies to 1-2 short texts. Separate with \\n\\n for separate iMessages
-- Be genuine, not performative. Read the room`;
+- If someone keeps asking the same fun/silly question, you can play along ONCE then redirect. Don't keep entertaining it
+- NEVER answer questions about AI, LLMs, coding, software, tech architecture, prompt engineering etc. You're a matchmaker, you don't know what any of that is. Just deflect with something like "bro i just set up dates i don't know what that means 😭"
+- CRITICAL: Keep replies UNDER 15 words. One sentence. That's it. Like a real text message
+- Think of how you'd reply to a friend in 3 seconds. That short
+- Be genuinely witty, not performatively nice
+- If they say something unhinged, lean into the humor then pivot to business
+- NEVER use more than 1 emoji. 😭 is your go-to when something's funny. Thats it
+- Don't say "omg", "yooo", "lets gooo", "amazing!", or any cringe filler
+- Sound like a real person who happens to be a matchmaker, not a chatbot
+- When redirecting to action (signup, invite friend, etc), be casual about it — "you still gotta finish signing up tho or i cant work my magic fr"
+- Never be preachy or lecture them. Keep it light even when pushing them to do something`;
 }
 
 // ─── Generate reply via LLM ───
@@ -169,11 +237,9 @@ async function generateReply(
   user: Awaited<ReturnType<typeof lookupUser>>,
   team: Awaited<ReturnType<typeof lookupTeam>>,
 ): Promise<string[]> {
-  if (!conversations.has(sender)) conversations.set(sender, []);
-  const history = conversations.get(sender)!;
+  const history = await loadHistory(sender);
 
-  history.push({ role: "user", content: combinedText, timestamp: Date.now() });
-  if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+  await saveMessage(sender, "user", combinedText);
 
   const systemPrompt = buildSystemPrompt(user, team);
 
@@ -181,7 +247,7 @@ async function generateReply(
     const llm = getLLM();
     const response = await llm.chat.completions.create({
       model: getModel(),
-      max_tokens: 250,
+      max_tokens: 40,
       temperature: 0.85,
       messages: [
         { role: "system", content: systemPrompt },
@@ -191,11 +257,10 @@ async function generateReply(
 
     const reply = response.choices[0]?.message?.content?.trim() || "hey 💜 one sec, something glitched on my end";
 
-    // Split on double newlines for separate iMessages
-    const parts = reply.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
-    const messages = parts.length > 0 ? parts.slice(0, 3) : [reply];
+    // Single message only — no splitting
+    const messages = [reply.replace(/\n\n+/g, " ").trim()];
 
-    history.push({ role: "assistant", content: messages.join("\n\n"), timestamp: Date.now() });
+    await saveMessage(sender, "assistant", messages.join("\n\n"));
 
     return messages;
   } catch (e) {
@@ -241,24 +306,18 @@ async function processMessages(sender: string) {
 
   logActivity("message", firstName || undefined, normalizePhone(sender), `"${combinedText}" → "${replies.join(" | ")}"`);
 
-  // Send replies using the message chain for proper routing
-  for (let i = 0; i < replies.length; i++) {
-    if (i > 0) {
-      await startTyping(sender);
-      await sleep(300 + Math.random() * 300);
-    }
-    await sdk.message(lastMsg)
-      .ifFromOthers()
-      .replyText(replies[i])
-      .execute();
-    console.log(`[bubl] → ${sender}: "${replies[i]}"`);
-  }
+  // Send single reply using message chain for proper routing
+  await sdk.message(lastMsg)
+    .ifFromOthers()
+    .replyText(replies[0])
+    .execute();
+  console.log(`[bubl] → ${sender}: "${replies[0]}"`);
 
   await stopTyping(sender);
 
-  // Contact card on first interaction
-  if (!sentCard.has(sender)) {
-    sentCard.add(sender);
+  // Send contact card on first interaction (persisted in DB)
+  if (!(await hasReceivedCard(sender))) {
+    await markCardSent(sender);
     await sleep(500);
     try {
       await sendContactCard(sender);

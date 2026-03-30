@@ -255,6 +255,25 @@ model AdminActivityLog {
   @@map("admin_activity_logs")
 }
 
+model BublChatHistory {
+  id         String   @id @default(uuid())
+  phone      String
+  role       String                           // "user" | "assistant"
+  content    String
+  created_at DateTime @default(now())
+
+  @@index([phone, created_at])
+  @@map("bubl_chat_history")
+}
+
+model BublContactSent {
+  id         String   @id @default(uuid())
+  phone      String   @unique
+  sent_at    DateTime @default(now())
+
+  @@map("bubl_contact_sent")
+}
+
 // ---------------------------------------------------------------------------
 // Bubl — User Profiles & Stats
 // ---------------------------------------------------------------------------

@@ -64,7 +64,7 @@ export function DashboardPage() {
         {/* Sidebar */}
         <aside className="w-[200px] flex flex-col flex-shrink-0 border-r border-zinc-100">
           <div className="px-6 h-16 flex items-center">
-            <Link to="/" className="text-[16px] font-semibold tracking-tight text-zinc-900">bit7</Link>
+            <Link to="/" className="text-[16px] font-semibold tracking-tight text-zinc-900">bubl.</Link>
           </div>
 
           <nav className="flex-1 px-3 py-2 space-y-0.5">
@@ -524,7 +524,7 @@ function SettingsTab() {
             </div>
             <div>
               <label className="text-[12px] text-zinc-500 mb-1.5 block">Email</label>
-              <input type="email" defaultValue="austin@bit7.dev" className="w-full px-4 py-2.5 text-[13px] text-zinc-900 bg-[#f0f5f1] border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-300" />
+              <input type="email" defaultValue="austin@bubl.buzz" className="w-full px-4 py-2.5 text-[13px] text-zinc-900 bg-[#f0f5f1] border border-zinc-200 rounded-xl focus:outline-none focus:border-zinc-300" />
             </div>
           </div>
         </div>
@@ -534,7 +534,7 @@ function SettingsTab() {
           <div className="flex items-center justify-between px-4 py-3 bg-[#f0f5f1] border border-zinc-200 rounded-xl">
             <div>
               <p className="text-[13px] font-medium">Production key</p>
-              <p className="text-[12px] text-zinc-400 font-mono">sk-bit7-••••••••••••k4Qm</p>
+              <p className="text-[12px] text-zinc-400 font-mono">sk-bubl-••••••••••••k4Qm</p>
             </div>
             <button className="text-[12px] text-blue-600 hover:text-blue-500 transition-colors font-medium">Copy</button>
           </div>
