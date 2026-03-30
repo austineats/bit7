@@ -50,8 +50,9 @@ export function AdminPage() {
   const [analytics, setAnalytics] = useState<Analytics>({ totalVisits: 0, todayVisits: 0, weekVisits: 0, activeLastHour: 0 });
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Signup | null>(null);
-  const [tab, setTab] = useState<"users" | "teams">("users");
+  const [tab, setTab] = useState<"users" | "teams" | "activity" | "visits">("users");
   const [statFilter, setStatFilter] = useState<string | null>(null);
+  const [activity, setActivity] = useState<{ id: string; action: string; actor_name: string | null; actor_phone: string | null; details: string | null; created_at: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { if (authed) loadData(); }, [authed]);
@@ -90,17 +91,20 @@ export function AdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [signupRes, teamRes, analyticsRes] = await Promise.all([
+      const [signupRes, teamRes, analyticsRes, activityRes] = await Promise.all([
         fetch("/api/blind-date/admin/signups"),
         fetch("/api/blind-date/admin/teams"),
         fetch("/api/blind-date/admin/analytics"),
+        fetch("/api/blind-date/admin/activity"),
       ]);
       const signupData = await signupRes.json();
       const teamData = await teamRes.json();
       const analyticsData = await analyticsRes.json();
+      const activityData = await activityRes.json();
       setSignups(signupData.signups || []);
       setTeams(teamData.teams || []);
       if (analyticsData.ok) setAnalytics(analyticsData);
+      setActivity(activityData.logs || []);
     } catch (e) { console.error("Failed to load:", e); }
     setLoading(false);
   };
@@ -150,7 +154,7 @@ export function AdminPage() {
             <button key={i} onClick={() => {
               if (["signups"].includes(s.filter)) { setTab("users"); setStatFilter(null); }
               else if (["teams", "full", "ready", "waiting"].includes(s.filter)) { setTab("teams"); setStatFilter(s.filter); }
-              else { setStatFilter(s.filter); }
+              else { setTab("activity"); setStatFilter(s.filter); }
             }}
               className={`shrink-0 border-2 px-3 py-1.5 text-center cursor-pointer hover:opacity-80 ${statFilter === s.filter ? "ring-2 ring-white" : ""}`}
               style={{ borderColor: s.color, background: `${s.color}10` }}>
@@ -167,14 +171,18 @@ export function AdminPage() {
       <div className="w-full sm:w-[340px] border-b-4 sm:border-b-0 sm:border-r-4 border-[#29adff] flex flex-col sm:h-[calc(100vh-90px)]">
         <div className="p-3 border-b-4 border-[#29adff]">
           {/* Tab switcher */}
-          <div className="flex gap-2 mb-3">
-            <button onClick={() => setTab("users")}
-              className={`flex-1 py-2 text-[7px] border-2 ${tab === "users" ? "border-[#29adff] bg-[#29adff] text-[#1d2b53]" : "border-[#29adff]/30 text-[#c2c3c7]"}`} style={px}>
-              USERS ({signups.length})
+          <div className="flex gap-1.5 mb-3">
+            <button onClick={() => { setTab("users"); setStatFilter(null); }}
+              className={`flex-1 py-2 text-[6px] border-2 ${tab === "users" ? "border-[#29adff] bg-[#29adff] text-[#1d2b53]" : "border-[#29adff]/30 text-[#c2c3c7]"}`} style={px}>
+              USERS
             </button>
-            <button onClick={() => setTab("teams")}
-              className={`flex-1 py-2 text-[7px] border-2 ${tab === "teams" ? "border-[#ff77a8] bg-[#ff77a8] text-[#1d2b53]" : "border-[#ff77a8]/30 text-[#c2c3c7]"}`} style={px}>
-              TEAMS ({teams.length})
+            <button onClick={() => { setTab("teams"); setStatFilter(null); }}
+              className={`flex-1 py-2 text-[6px] border-2 ${tab === "teams" ? "border-[#ff77a8] bg-[#ff77a8] text-[#1d2b53]" : "border-[#ff77a8]/30 text-[#c2c3c7]"}`} style={px}>
+              TEAMS
+            </button>
+            <button onClick={() => { setTab("activity"); setStatFilter(null); }}
+              className={`flex-1 py-2 text-[6px] border-2 ${tab === "activity" ? "border-[#ffec27] bg-[#ffec27] text-[#1d2b53]" : "border-[#ffec27]/30 text-[#c2c3c7]"}`} style={px}>
+              LOGS
             </button>
           </div>
           <div className="relative">
@@ -189,6 +197,8 @@ export function AdminPage() {
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <p className="text-center text-[#c2c3c7] py-10 text-[9px]" style={px}>LOADING...</p>
+          ) : tab === "activity" ? (
+            <ActivityList activity={activity} />
           ) : tab === "users" ? (
             filtered.length === 0 ? (
               <p className="text-center text-[#c2c3c7] py-10 text-[9px]" style={px}>NO USERS</p>
@@ -355,6 +365,34 @@ export function AdminPage() {
       </div>
       </div>
     </div>
+  );
+}
+
+const actionColors: Record<string, string> = {
+  signup: "#ffec27", team_created: "#29adff", team_joined: "#00e436",
+  ready_up: "#ff77a8", message: "#c2c3c7", signin: "#29adff",
+  admin_delete: "#ff004d", first_message: "#ff77a8", unknown_message: "#5f574f",
+};
+
+function ActivityList({ activity }: { activity: { id: string; action: string; actor_name: string | null; actor_phone: string | null; details: string | null; created_at: string }[] }) {
+  if (activity.length === 0) return <p className="text-center text-[#c2c3c7] py-10 text-[9px]" style={{ fontFamily: "'Press Start 2P', monospace" }}>NO LOGS</p>;
+  return (
+    <>
+      {activity.map(a => {
+        const c = actionColors[a.action] || "#5f574f";
+        return (
+          <div key={a.id} className="px-3 py-2.5 border-b-2 border-[#1d2b53]">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[7px] px-2 py-0.5 border-2" style={{ borderColor: c, color: c, fontFamily: "'Press Start 2P', monospace" }}>{a.action.toUpperCase().replace(/_/g, " ")}</span>
+              <span className="text-[#c2c3c7]/40 text-[6px]" style={{ fontFamily: "'Press Start 2P', monospace" }}>{timeAgo(a.created_at)}</span>
+            </div>
+            {a.actor_name && <p className="text-[#fff1e8] text-[8px]" style={{ fontFamily: "'Press Start 2P', monospace" }}>{a.actor_name}</p>}
+            {a.actor_phone && <p className="text-[#c2c3c7] text-[7px]" style={{ fontFamily: "'Press Start 2P', monospace" }}>{a.actor_phone}</p>}
+            {a.details && <p className="text-[#c2c3c7]/60 text-[6px] mt-1 break-words leading-[1.8]" style={{ fontFamily: "'Press Start 2P', monospace" }}>{a.details}</p>}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
