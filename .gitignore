@@ -6,3 +6,6 @@ dist
 .claude/
 logs/*.log
 *.dylib
+
+# Local Netlify folder
+.netlify

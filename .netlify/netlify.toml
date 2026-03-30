@@ -10,8 +10,8 @@ headers = []
 publish = "/Users/bitseven/Bubl/frontend/dist"
 publishOrigin = "config"
 commandOrigin = "config"
-base = "/Users/bitseven/Bubl/frontend"
 command = "npm run build"
+base = "/Users/bitseven/Bubl/frontend"
 
 [build.environment]
 

@@ -1,8 +1,37 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 const px = { fontFamily: "'Press Start 2P', monospace" } as const;
+
+function PixelSelect({ value, onChange, placeholder, options, className = "" }: {
+  value: string; onChange: (val: string) => void; placeholder: string;
+  options: { value: string; label: string }[]; className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button type="button" onClick={() => setOpen(!open)}
+        className="w-full px-3 sm:px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-left text-[16px] focus:outline-none focus:border-[#ffec27] min-h-[44px] flex items-center justify-between" style={px}>
+        <span className={`text-[9px] sm:text-[11px] ${value ? "text-white" : "text-[#29adff]/40"}`}>
+          {value ? options.find(o => o.value === value)?.label || value : placeholder}
+        </span>
+        <span className="text-[#29adff] text-[8px]">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 w-full mt-1 border-4 border-[#29adff] bg-[#1d2b53] max-h-[200px] overflow-y-auto" style={{ boxShadow: "4px 4px 0 #1a6b99" }}>
+          {options.map(opt => (
+            <button key={opt.value} type="button" onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full px-3 py-2.5 text-left text-[9px] sm:text-[11px] min-h-[40px] ${value === opt.value ? "bg-[#29adff] text-[#1d2b53]" : "text-white hover:bg-[#29adff]/20"}`} style={px}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function JoinPage() {
   const { code } = useParams();
@@ -129,29 +158,18 @@ export function JoinPage() {
                     type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="&gt; age"
                     className={inputClass} style={px}
                   />
-                  <select
-                    value={gender} onChange={(e) => setGender(e.target.value)}
-                    className={`${inputClass} appearance-none cursor-pointer`}
-                    style={{ ...px, color: gender ? "white" : "rgba(41,173,255,0.4)" }}
-                  >
-                    <option value="" disabled>&gt; gender</option>
-                    <option value="boy">Boy</option>
-                    <option value="girl">Girl</option>
-                  </select>
-                  <select
-                    value={school} onChange={(e) => setSchool(e.target.value)}
-                    className={`${inputClass} appearance-none cursor-pointer`}
-                    style={{ ...px, color: school ? "white" : "rgba(41,173,255,0.4)" }}
-                  >
-                    <option value="" disabled>&gt; school</option>
-                    <option value="Portola High School">Portola High School</option>
-                    <option value="Irvine High School">Irvine High School</option>
-                    <option value="Northwood High School">Northwood High School</option>
-                    <option value="Woodbridge High School">Woodbridge High School</option>
-                    <option value="Beckman High School">Beckman High School</option>
-                    <option value="Crean Lutheran High School">Crean Lutheran High School</option>
-                    <option value="University High School">University High School</option>
-                  </select>
+                  <PixelSelect value={gender} onChange={setGender} placeholder="&gt; gender"
+                    options={[{ value: "boy", label: "Boy" }, { value: "girl", label: "Girl" }]} />
+                  <PixelSelect value={school} onChange={setSchool} placeholder="&gt; school"
+                    options={[
+                      { value: "Portola High School", label: "Portola High School" },
+                      { value: "Irvine High School", label: "Irvine High School" },
+                      { value: "Northwood High School", label: "Northwood High School" },
+                      { value: "Woodbridge High School", label: "Woodbridge High School" },
+                      { value: "Beckman High School", label: "Beckman High School" },
+                      { value: "Crean Lutheran High School", label: "Crean Lutheran High School" },
+                      { value: "University High School", label: "University High School" },
+                    ]} />
 
                   {error && <p className="text-[11px] text-[#ff004d] text-center">! {error}</p>}
 
