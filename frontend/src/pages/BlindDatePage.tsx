@@ -153,48 +153,10 @@ function PixelStars() {
 
 /* ─── Phone Mockup — just messages on mobile, full iPhone on desktop ─── */
 function PhoneMockup() {
-  const sys = { fontFamily: '-apple-system, system-ui, sans-serif' } as const;
-
-  const messages = (
-    <div className="space-y-[6px]">
-      {/* User texts bubl first */}
-      <div className="flex justify-end">
-        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
-          hey bubl i signed up!
-        </div>
-      </div>
-      {/* bubl replies */}
-      <div className="flex justify-start">
-        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
-          eli! you're locked in, get your friend to join and i'll find your match
-        </div>
-      </div>
-      {/* Profile card */}
-      <div className="flex justify-start">
-        <div className="max-w-[75%] rounded-[14px] overflow-hidden">
-          <img src="/bubl. iphone ui.jpeg" className="w-full rounded-[14px]" alt="Bella profile card" />
-        </div>
-      </div>
-      <div className="flex justify-end">
-        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
-          is she bad tho
-        </div>
-      </div>
-      <div className="flex justify-start">
-        <div className="max-w-[80%] px-3 py-[7px] text-[15px] leading-[1.3] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
-          you'll have to find out thursday 👀
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <>
-      {/* Messages only — clean, no phone frame */}
-      <div className="w-full max-w-[300px] sm:max-w-[340px] bg-black rounded-[20px] p-4 sm:p-5">
-        {messages}
-      </div>
-    </>
+    <div className="w-[280px] sm:w-[340px] shrink-0">
+      <img src="/bubl. iphone ui.jpeg" className="w-full rounded-[16px]" alt="bubl iMessage preview" />
+    </div>
   );
 }
 
