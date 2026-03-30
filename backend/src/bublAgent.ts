@@ -15,7 +15,7 @@ const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingMessages = new Map<string, { texts: string[]; lastMsg: Message }>();
 
 const REPLY_DELAY = 1200;
-const MAX_HISTORY = 30;
+const MAX_HISTORY = 10;
 
 // ─── Persistent history ───
 
@@ -52,6 +52,13 @@ async function saveMessage(phone: string, role: "user" | "assistant", content: s
       });
       await prisma.bublChatHistory.deleteMany({ where: { id: { in: oldest.map(r => r.id) } } });
     }
+  } catch {}
+}
+
+export async function clearHistory(phone: string) {
+  historyCache.delete(phone);
+  try {
+    await prisma.bublChatHistory.deleteMany({ where: { phone } });
   } catch {}
 }
 

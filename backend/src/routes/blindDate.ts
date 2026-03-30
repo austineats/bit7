@@ -8,6 +8,7 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/db.js";
 import { sendIMessage } from "../lib/imessage/imessageClient.js";
+import { clearHistory } from "../bublAgent.js";
 
 export const blindDateRouter = Router();
 
@@ -93,6 +94,9 @@ blindDateRouter.post("/signup", upload.none(), async (req, res) => {
 
     let parsedHobbies: string[] = [];
     try { parsedHobbies = hobbies ? JSON.parse(hobbies) : []; } catch { /* ignore */ }
+
+    // Clear any orphaned chat history from previous signups
+    await clearHistory(normalized);
 
     const signup = await prisma.blindDateSignup.create({
       data: {
@@ -222,6 +226,7 @@ blindDateRouter.delete("/admin/signups/:id", async (req, res) => {
   try {
     const signup = await prisma.blindDateSignup.findUnique({ where: { id: req.params.id } });
     await prisma.blindDateSignup.delete({ where: { id: req.params.id } });
+    if (signup?.phone) await clearHistory(signup.phone);
     logActivity("admin_delete", signup?.name || undefined, signup?.phone || undefined, `Deleted signup ${req.params.id}`);
     return res.json({ ok: true });
   } catch {
@@ -233,6 +238,8 @@ blindDateRouter.delete("/admin/teams/:id", async (req, res) => {
   try {
     const team = await prisma.blindDateTeam.findUnique({ where: { id: req.params.id } });
     await prisma.blindDateTeam.delete({ where: { id: req.params.id } });
+    if (team?.player1_phone) await clearHistory(team.player1_phone);
+    if (team?.player2_phone) await clearHistory(team.player2_phone);
     logActivity("admin_delete", undefined, undefined, `Deleted team ${team?.code || req.params.id}`);
     return res.json({ ok: true });
   } catch {
