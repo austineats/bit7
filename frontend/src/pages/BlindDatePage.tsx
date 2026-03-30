@@ -20,10 +20,10 @@ function PixelSelect({ value, onChange, placeholder, options, className = "" }: 
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full px-3 sm:px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-left text-[16px] focus:outline-none focus:border-[#ffec27] min-h-[44px] flex items-center justify-between"
+        className="w-full px-3 sm:px-4 border-4 border-[#29adff] bg-[#1d2b53] text-left text-[11px] focus:outline-none focus:border-[#ffec27] h-[48px] flex items-center justify-between"
         style={px}
       >
-        <span className={`text-[9px] sm:text-[11px] ${value ? "text-white" : "text-[#29adff]/40"}`}>
+        <span className={value ? "text-white" : "text-[#29adff]/40"}>
           {value ? options.find(o => o.value === value)?.label || value : placeholder}
         </span>
         <span className="text-[#29adff] text-[8px]">{open ? "▲" : "▼"}</span>
@@ -155,7 +155,7 @@ function PixelStars() {
 function PhoneMockup() {
   const sys = { fontFamily: '-apple-system, system-ui, sans-serif' } as const;
   return (
-    <div className="w-[220px] sm:w-[270px] shrink-0 max-w-full">
+    <div className="w-[200px] sm:w-[270px] shrink-0 max-w-full">
       {/* Outer frame — titanium edge, very thin bezel */}
       <div
         className="rounded-[46px] p-[3px] shadow-2xl shadow-black/60"
@@ -180,24 +180,24 @@ function PhoneMockup() {
             </div>
             <div className="flex flex-col items-center -mt-1">
               <img src="/bubl-logo.png" className="w-8 h-8 rounded-full object-cover" alt="bubl" />
-              <p className="text-[11px] font-semibold text-white" style={sys}>bubl</p>
-              <p className="text-[9px] text-[#8E8E93]" style={sys}>iMessage</p>
+              <p className="text-[10px] sm:text-[11px] font-semibold text-white" style={sys}>bubl</p>
+              <p className="text-[8px] sm:text-[9px] text-[#8E8E93]" style={sys}>iMessage</p>
             </div>
           </div>
           {/* Messages */}
           <div className="px-3 pb-2.5 pt-2 space-y-[5px]">
             <div className="flex justify-start">
-              <div className="max-w-[80%] px-3 py-[6px] text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
+              <div className="max-w-[80%] px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
                 hey eli! this is bella: I think you'd have a great time with her
               </div>
             </div>
             <div className="flex justify-start">
-              <div className="max-w-[80%] px-3 py-[6px] text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
+              <div className="max-w-[80%] px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
                 you both love fashion AND matcha!
               </div>
             </div>
             <div className="flex justify-start">
-              <div className="max-w-[80%] px-3 py-[6px] text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
+              <div className="max-w-[80%] px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#1C1C1E] text-[#E5E5EA] rounded-[18px] rounded-bl-[4px]" style={sys}>
                 wanna meet her?
               </div>
             </div>
@@ -209,7 +209,7 @@ function PhoneMockup() {
             </div>
             {/* User reply — YES in blue */}
             <div className="flex justify-end">
-              <div className="px-3 py-[6px] text-[12px] leading-[1.35] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
+              <div className="px-3 py-[6px] text-[10px] sm:text-[12px] leading-[1.35] bg-[#007AFF] text-white rounded-[18px] rounded-br-[4px]" style={sys}>
                 YES
               </div>
             </div>
@@ -286,8 +286,7 @@ export function BlindDatePage() {
     setError("");
     if (!name.trim() || !phone.trim() || !age.trim() || !gender || !school) { setError("all fields required!"); return; }
     const ageNum = parseInt(age);
-    if (isNaN(ageNum) || ageNum < 13) { setError("you must be at least 13"); return; }
-    if (ageNum > 18) { setError("bubl is for high schoolers only (13-18)"); return; }
+    if (isNaN(ageNum) || ageNum < 14 || ageNum > 18) { setError("bubl. is currently only reserved for highschoolers."); return; }
     setFormState("submitting");
     const fd = new FormData();
     fd.append("name", name.trim());
@@ -308,7 +307,7 @@ export function BlindDatePage() {
   const scrollToSignup = () => signupRef.current?.scrollIntoView({ behavior: "smooth" });
 
   const inputClass =
-    "w-full px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-white text-[10px] sm:text-[11px] placeholder:text-[#29adff]/40 focus:outline-none focus:border-[#ffec27] min-h-[44px]";
+    "w-full px-3 sm:px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-white text-[11px] placeholder:text-[#29adff]/40 focus:outline-none focus:border-[#ffec27] h-[48px]";
 
   return (
     <div className="min-h-screen relative overflow-x-hidden" style={px}>

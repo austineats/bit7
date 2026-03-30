@@ -13,7 +13,7 @@ function PixelSelect({ value, onChange, placeholder, options, className = "" }: 
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button type="button" onClick={() => setOpen(!open)}
-        className="w-full px-3 sm:px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-left text-[16px] focus:outline-none focus:border-[#ffec27] min-h-[44px] flex items-center justify-between" style={px}>
+        className="w-full px-3 sm:px-4 border-4 border-[#29adff] bg-[#1d2b53] text-left text-[11px] focus:outline-none focus:border-[#ffec27] h-[48px] flex items-center justify-between" style={px}>
         <span className={`text-[9px] sm:text-[11px] ${value ? "text-white" : "text-[#29adff]/40"}`}>
           {value ? options.find(o => o.value === value)?.label || value : placeholder}
         </span>
@@ -61,8 +61,7 @@ export function JoinPage() {
       return;
     }
     const ageNum = parseInt(age);
-    if (isNaN(ageNum) || ageNum < 13) { setError("you must be at least 13"); return; }
-    if (ageNum > 18) { setError("bubl is for high schoolers only (13-18)"); return; }
+    if (isNaN(ageNum) || ageNum < 14 || ageNum > 18) { setError("bubl. is currently only reserved for highschoolers."); return; }
     setFormState("submitting");
     const fd = new FormData();
     fd.append("name", name.trim());
@@ -86,7 +85,7 @@ export function JoinPage() {
   };
 
   const inputClass =
-    "w-full px-3 sm:px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-white text-[9px] sm:text-[11px] placeholder:text-[#29adff]/40 focus:outline-none focus:border-[#ffec27]";
+    "w-full px-3 sm:px-4 py-3 border-4 border-[#29adff] bg-[#1d2b53] text-white text-[11px] placeholder:text-[#29adff]/40 focus:outline-none focus:border-[#ffec27] h-[48px]";
 
   return (
     <div className="min-h-screen relative overflow-x-hidden" style={px}>
