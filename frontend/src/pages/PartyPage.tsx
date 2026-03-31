@@ -641,6 +641,7 @@ export function PartyPage() {
           </motion.div>
 
         </motion.div>
+        </div>
       </div>
 
       {joinModal && (

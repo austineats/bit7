@@ -1,5 +1,5 @@
 /**
- * Unified LLM client — routes all API calls through Gemini (OpenAI-compatible)
+ * Unified LLM client — routes all API calls through OpenAI (gpt-4o-mini)
  * Provides an Anthropic-style interface so the rest of the codebase doesn't need to change.
  */
 import OpenAI from "openai";
@@ -9,29 +9,17 @@ let _client: OpenAI | null = null;
 
 function getGeminiClient(): OpenAI {
   if (_client) return _client;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
-  _client = new OpenAI({
-    apiKey,
-    baseURL: process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai/",
-  });
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+  _client = new OpenAI({ apiKey });
   return _client;
 }
 
 /**
- * Remap any Claude/Anthropic model name to a Gemini-compatible model.
- * gemini-flash-lite-latest is the fast/cheap model.
+ * Remap any model name to gpt-4o-mini.
  */
-function remapModel(model: string): string {
-  const m = model.toLowerCase();
-  // Already a Gemini model — pass through
-  if (m.startsWith("gemini-")) return model;
-  // Map Claude tiers to Gemini equivalents
-  if (m.includes("haiku")) return "gemini-flash-lite-latest";
-  if (m.includes("sonnet")) return "gemini-flash-lite-latest";
-  if (m.includes("opus")) return "gemini-flash-lite-latest";
-  // Unknown — default to flash-lite
-  return "gemini-flash-lite-latest";
+function remapModel(_model: string): string {
+  return "gpt-4o-mini";
 }
 
 interface MessageParam {

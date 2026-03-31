@@ -1,8 +1,54 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check } from "lucide-react";
 
 const px = { fontFamily: "'Press Start 2P', monospace" };
+
+/* ─── Scroll reveal hook ─── */
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.05 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return { ref, style: { opacity: visible ? 1 : 0, transform: visible ? "none" : "translateY(30px)", transition: "opacity 0.7s ease-out, transform 0.7s ease-out" } as React.CSSProperties };
+}
+
+/* ─── Animated counter ─── */
+function AnimCounter({ target, suffix = "" }: { target: number; suffix?: string }) {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const started = useRef(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !started.current) {
+        started.current = true;
+        let frame = 0;
+        const totalFrames = 40;
+        const step = () => {
+          frame++;
+          setCount(Math.min(Math.round((frame / totalFrames) * target), target));
+          if (frame < totalFrames) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+        obs.disconnect();
+      }
+    }, { threshold: 0.5 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [target]);
+  return <span ref={ref}>{count}{suffix}</span>;
+}
+
 
 /* ─── Custom pixel select dropdown ─── */
 function PixelSelect({ value, onChange, placeholder, options, className = "" }: {
@@ -49,9 +95,8 @@ function PixelSelect({ value, onChange, placeholder, options, className = "" }: 
   );
 }
 
-
-/* ─── Pixel border box ─── */
-function PixelBox({ children, className = "", color = "#fff" }: { children: React.ReactNode; className?: string; color?: string }) {
+/* ─── Pixel border box with optional border beam ─── */
+function PixelBox({ children, className = "", color = "#fff", beam = false }: { children: React.ReactNode; className?: string; color?: string; beam?: boolean }) {
   return (
     <div
       className={`relative ${className}`}
@@ -61,6 +106,14 @@ function PixelBox({ children, className = "", color = "#fff" }: { children: Reac
         imageRendering: "pixelated",
       }}
     >
+      {beam && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-10">
+          <div
+            className="absolute w-8 h-8 rounded-full animate-border-beam"
+            style={{ background: `radial-gradient(circle, ${color}, transparent)`, filter: "blur(4px)" }}
+          />
+        </div>
+      )}
       {children}
     </div>
   );
@@ -76,15 +129,38 @@ function BlinkCursor() {
   );
 }
 
-/* ─── Pixel heart — matches the reference image (3D shaded red with black outline + white shine) ─── */
+/* ─── Glitch logo ─── */
+function GlitchLogo({ size = "text-[36px] sm:text-[80px] lg:text-[112px]" }: { size?: string }) {
+  return (
+    <div className="relative inline-block">
+      <h1 className={`${size} leading-none tracking-tight text-[#ff004d] relative z-10`}>
+        bubl.
+      </h1>
+      {/* Glitch layers */}
+      <h1
+        className={`${size} leading-none tracking-tight text-[#29adff] absolute top-0 left-0 animate-glitch-1 pointer-events-none`}
+        aria-hidden
+      >
+        bubl.
+      </h1>
+      <h1
+        className={`${size} leading-none tracking-tight text-[#ffec27] absolute top-0 left-0 animate-glitch-2 pointer-events-none`}
+        aria-hidden
+      >
+        bubl.
+      </h1>
+    </div>
+  );
+}
+
+/* ─── Pixel heart ─── */
 function PixelHeart({ size = 32 }: { size?: number }) {
-  const s = size / 16; // scale factor
+  const s = size / 16;
   const r = (x: number, y: number, w: number, h: number, fill: string) => (
     <rect x={x * s} y={y * s} width={w * s} height={h * s} fill={fill} />
   );
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ imageRendering: "pixelated" }}>
-      {/* Black outline */}
       {r(2,0,3,1,"#000")}{r(8,0,3,1,"#000")}
       {r(1,1,1,1,"#000")}{r(5,1,3,1,"#000")}{r(11,1,1,1,"#000")}
       {r(0,2,1,2,"#000")}{r(12,2,1,2,"#000")}
@@ -96,12 +172,10 @@ function PixelHeart({ size = 32 }: { size?: number }) {
       {r(4,9,1,1,"#000")}{r(8,9,1,1,"#000")}
       {r(5,10,1,1,"#000")}{r(7,10,1,1,"#000")}
       {r(6,11,1,1,"#000")}
-      {/* Dark red shadow edges */}
       {r(5,5,7,1,"#9b0000")}{r(4,6,7,1,"#9b0000")}{r(5,7,5,1,"#9b0000")}
       {r(6,8,3,1,"#9b0000")}{r(7,9,1,1,"#9b0000")}
       {r(11,2,1,2,"#9b0000")}{r(11,4,1,1,"#9b0000")}{r(11,5,1,1,"#9b0000")}
       {r(10,6,1,1,"#9b0000")}
-      {/* Main red fill */}
       {r(2,1,3,1,"#e00")}{r(8,1,3,1,"#e00")}
       {r(1,2,3,1,"#e00")}{r(7,2,4,1,"#e00")}
       {r(1,3,3,1,"#e00")}{r(6,3,5,1,"#e00")}
@@ -112,9 +186,7 @@ function PixelHeart({ size = 32 }: { size?: number }) {
       {r(4,8,2,1,"#e00")}{r(7,8,2,1,"#e00")}
       {r(5,9,2,1,"#e00")}
       {r(6,10,1,1,"#e00")}
-      {/* Bright red highlight */}
       {r(4,2,3,1,"#ff2222")}{r(4,3,2,1,"#ff2222")}{r(5,4,1,1,"#ff2222")}
-      {/* White shine spots */}
       {r(3,2,1,1,"#fff")}{r(4,1,1,1,"#fff")}
       {r(3,3,1,1,"#fff")}
     </svg>
@@ -151,7 +223,7 @@ function PixelStars() {
   );
 }
 
-/* ─── Phone Mockup — just messages on mobile, full iPhone on desktop ─── */
+/* ─── Phone Mockup ─── */
 function PhoneMockup() {
   return (
     <div className="w-[280px] sm:w-[340px] shrink-0">
@@ -187,6 +259,32 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
+/* ─── High score / stats bar ─── */
+function ArcadeStats() {
+  const reveal = useReveal();
+  return (
+    <div ref={reveal.ref} style={reveal.style}>
+      <div className="max-w-4xl mx-auto grid grid-cols-3 gap-4 sm:gap-8 py-10 sm:py-16 px-4">
+        {[
+          { label: "MATCHES", value: 100, suffix: "+", color: "#ff004d" },
+          { label: "SWIPES", value: 0, suffix: "", color: "#ffec27" },
+          { label: "DOWNLOADS", value: 0, suffix: "", color: "#00e436" },
+        ].map((stat, i) => (
+          <div key={i} className="text-center">
+            <div
+              className="text-[24px] sm:text-[40px] leading-none neon-text"
+              style={{ color: stat.color, textShadow: `0 0 10px ${stat.color}, 0 0 30px ${stat.color}44` }}
+            >
+              <AnimCounter target={stat.value} suffix={stat.suffix} />
+            </div>
+            <p className="text-[7px] sm:text-[9px] text-[#5f574f] mt-2 uppercase">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ═══ Page ═══ */
 type FormState = "idle" | "submitting" | "success";
 
@@ -195,12 +293,20 @@ export function BlindDatePage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [age, setAge] = useState("");
-  const [gender, setGender] = useState("");
-  const [school, setSchool] = useState("");
   const [gender, setGender] = useState<"guy" | "girl" | "">("");
+  const [school, setSchool] = useState("");
   const [formState, setFormState] = useState<FormState>("idle");
   const [error, setError] = useState("");
   const signupRef = useRef<HTMLDivElement>(null);
+
+  // Section refs (simple fade-up on scroll)
+  const howItWorks = useReveal();
+
+  const quote = useReveal();
+  const imessage = useReveal();
+  const photos = useReveal();
+  const signup = useReveal();
+  const faq = useReveal();
 
   const fmt = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 10);
@@ -224,7 +330,6 @@ export function BlindDatePage() {
       const res = await fetch("/api/blind-date/signup", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "something went wrong"); setFormState("idle"); return; }
-      // Navigate immediately — don't set success state to avoid flash
       const teamCode = data.teamCode || Math.random().toString(36).slice(2, 6).toUpperCase();
       sessionStorage.setItem(`bubl-invite-${teamCode}`, JSON.stringify({ name: name.trim(), gender }));
       navigate(`/invite/${teamCode}`, { replace: true });
@@ -258,17 +363,24 @@ export function BlindDatePage() {
 
       <PixelStars />
 
-      {/* ─── Nav ─── */}
-      <nav className="fixed top-0 w-full z-50 border-b-4 border-[#29adff] bg-[#1d2b53]/95">
+      {/* ─── Arcade Nav ─── */}
+      <nav className="fixed top-0 w-full z-50 border-b-4 border-[#29adff] bg-[#1d2b53]/95 backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
-          <span className="text-[#ff004d] text-[14px] sm:text-[18px]">bubl.</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[#ff004d] text-[14px] sm:text-[18px]">bubl.</span>
+            <div className="flex items-center gap-1 ml-2">
+              <PixelHeart size={12} />
+              <PixelHeart size={12} />
+              <PixelHeart size={12} />
+            </div>
+          </div>
           <div className="flex items-center gap-2 sm:gap-4">
-            <button onClick={() => navigate("/signin")} className="text-[#c2c3c7] text-[8px] sm:text-[11px] hover:text-[#ffec27] transition-none py-2">
+<button onClick={() => navigate("/signin")} className="text-[#c2c3c7] text-[8px] sm:text-[11px] hover:text-[#ffec27] transition-none py-2">
               <span className="hidden sm:inline">&gt;&gt; </span>[ SIGN IN ]
             </button>
             <span className="text-[#5f574f] text-[8px] sm:text-[11px]">|</span>
             <button onClick={scrollToSignup} className="text-[#29adff] text-[8px] sm:text-[11px] hover:text-[#ffec27] transition-none py-2">
-              [ JOIN ]<span className="hidden sm:inline"> &gt;&gt;</span>
+              [ SIGN UP ]<span className="hidden sm:inline"> &gt;&gt;</span>
             </button>
           </div>
         </div>
@@ -277,33 +389,35 @@ export function BlindDatePage() {
       {/* ─── Hero ─── */}
       <section className="relative z-10 min-h-[100svh] flex flex-col justify-center px-4 sm:px-6 pt-20 sm:pt-24 pb-12 sm:pb-16">
         <div className="max-w-5xl mx-auto w-full flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8 sm:gap-12">
-          <div className="flex-1 order-2 lg:order-1">
+          <div className="flex-1 order-2 lg:order-1 animate-fade-up">
             <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8">
               <PixelHeart size={28} />
               <PixelHeart size={28} />
               <PixelHeart size={28} />
             </div>
-            <h1 className="text-[36px] sm:text-[80px] lg:text-[112px] leading-none tracking-tight text-[#ff004d]">
-              bubl.
-            </h1>
+            <GlitchLogo />
             <p className="mt-4 sm:mt-6 text-[#c2c3c7] text-[10px] sm:text-[15px] leading-[2.2] max-w-lg">
               Get a match every Thursday. No app downloads, No awkward dms.
             </p>
             <p className="mt-2 sm:mt-3 text-[#ffec27] text-[9px] sm:text-[11px] leading-[2]">
               &gt; iMessage only<BlinkCursor />
             </p>
-            <button
-              onClick={scrollToSignup}
-              className="mt-6 sm:mt-8 px-6 sm:px-8 py-3 sm:py-4 min-h-[44px] border-4 border-[#ffec27] bg-[#ffec27] text-[#1d2b53] text-[10px] sm:text-[13px] hover:bg-[#fff1a8] active:translate-x-[2px] active:translate-y-[2px] transition-none"
-              style={{ boxShadow: "4px 4px 0 #ab5236" }}
-            >
-              &gt; JOIN WAITLIST
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-6 sm:mt-8">
+              <button
+                onClick={scrollToSignup}
+                className="px-6 sm:px-8 py-3 sm:py-4 min-h-[44px] border-4 border-[#ffec27] bg-[#ffec27] text-[#1d2b53] text-[10px] sm:text-[13px] hover:bg-[#fff1a8] active:translate-x-[2px] active:translate-y-[2px] transition-none"
+                style={{ boxShadow: "4px 4px 0 #ab5236", animation: "arcade-pulse 2s ease-in-out infinite" }}
+              >
+                GET MATCHED
+              </button>
+              <div className="text-[7px] sm:text-[8px] text-[#5f574f] self-center animate-blink-slow">
+                SIGN UP — TAKES 10 SEC
+              </div>
+            </div>
           </div>
-          <div className="shrink-0 order-1 lg:order-2 self-center">
-            {/* Pixel polaroid */}
+          <div className="shrink-0 order-1 lg:order-2 self-center animate-slide-up-fade" style={{ animationDelay: "0.2s" }}>
             <div className="relative">
-              <PixelBox color="#ff77a8" className="bg-[#1d2b53] p-0 overflow-hidden">
+              <PixelBox color="#ff77a8" className="bg-[#1d2b53] p-0 overflow-hidden" beam>
                 <img
                   src="/peson.jpg"
                   alt=""
@@ -311,9 +425,11 @@ export function BlindDatePage() {
                   style={{ imageRendering: "pixelated" }}
                 />
               </PixelBox>
-              {/* Pixel decorations */}
               <div className="absolute -top-4 -right-4"><PixelHeart size={24} /></div>
               <div className="absolute -bottom-4 -left-4 text-[#ff004d] text-[24px]">&lt;3</div>
+              <div className="absolute -bottom-6 -right-6 bg-[#1d2b53] border-2 border-[#29adff] px-2 py-1 text-[7px] text-[#29adff]">
+                P1 READY
+              </div>
             </div>
           </div>
         </div>
@@ -328,7 +444,7 @@ export function BlindDatePage() {
               <div key={half} className="flex shrink-0">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <span key={i} className="text-[#29adff] text-[8px] sm:text-[11px] mx-4 sm:mx-8 uppercase shrink-0">
-                    *** iMessage only *** love is a game, literally *** every thursday *** no app required
+                    *** iMessage only *** love is a game, literally *** every thursday *** no app required *** PLAYER 2 AWAITS ***
                   </span>
                 ))}
               </div>
@@ -336,334 +452,264 @@ export function BlindDatePage() {
           </div>
         </div>
 
+        {/* ─── Animated stats ─── */}
+        <ArcadeStats />
+
         {/* ─── How it works ─── */}
         <section className="py-16 sm:py-32 px-4 sm:px-6">
-          <PixelBox color="#29adff" className="max-w-4xl mx-auto bg-[#1d2b53] p-5 sm:p-12">
-            <div className="grid lg:grid-cols-2 gap-8 sm:gap-10 lg:gap-14">
-              <div>
-                <p className="text-[#ff77a8] text-[9px] sm:text-[11px] mb-4 sm:mb-5">&lt; HOW IT WORKS &gt;</p>
-                <h2 className="text-[18px] sm:text-[30px] lg:text-[38px] text-[#fff1e8] leading-[1.7]">
-                  Sign up.<br />
-                  Get texted.<br />
-                  Meet someone<br />
-                  <span className="text-[#ff004d] underline decoration-4" style={{ textUnderlineOffset: "8px", textShadow: "0 0 8px #ff004d, 0 0 20px #ff004d55" }}>real.</span>
-                </h2>
-              </div>
-              <div className="flex flex-col justify-center space-y-5 sm:space-y-7">
-                {[
-                  "Curate your profile and invite your friend.",
-                  "Tell bubl your preferences by Wednesday 11:59 PM.",
-                  "Every Thursday, receive two new matches for you and your friend.",
-                  "Reply Yes — we set the date.",
-                  "Ages are carefully matched for safety.",
-                ].map((text, i) => (
-                  <div key={i} className="flex gap-3 sm:gap-4 items-start">
-                    <span className="text-[#ffec27] text-[12px] sm:text-[14px] shrink-0">[{i + 1}]</span>
-                    <p className="text-[#c2c3c7] text-[9px] sm:text-[11px] leading-[2.2]">{text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </PixelBox>
-        </section>
-
-        {/* ─── Your Personalized Matchmaker ─── */}
-        <section className="py-16 sm:py-32 px-4 sm:px-6">
-          <div className="max-w-5xl mx-auto">
-            {/* Title */}
-            <div className="text-center mb-10 sm:mb-16">
-              <div className="inline-block bg-[#1d2b53] border-4 border-[#ff77a8] px-4 sm:px-6 py-2 sm:py-3" style={{ boxShadow: "4px 4px 0 #7a2a4a" }}>
-                <span className="text-[#fff1e8] text-[11px] sm:text-[20px]">Your </span>
-                <span className="text-[#ff004d] text-[11px] sm:text-[20px] italic">Personalized</span>
-                <br />
-                <span className="text-[#fff1e8] text-[11px] sm:text-[20px]">Matchmaker</span>
-              </div>
-            </div>
-
-            {/* Three columns — all same height boxes */}
-            <div className="grid sm:grid-cols-3 gap-6 sm:gap-6">
-              {/* Column 1 — AI Research */}
-              <div className="flex flex-col items-center text-center gap-4 sm:gap-5">
-                <p className="text-[#fff1e8] text-[10px] sm:text-[14px] leading-[1.8]">Backed by the best<br />AI research</p>
-                <div className="bg-[#1d2b53] border-4 border-[#29adff] p-4 sm:p-6 w-full h-[160px] sm:h-[180px] flex items-center justify-center" style={{ boxShadow: "4px 4px 0 #1a6b99" }}>
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="flex gap-2">
-                      <div className="w-[50px] h-[65px] bg-[#fff1e8] border-2 border-[#c2c3c7] flex flex-col items-center justify-center p-1">
-                        <div className="w-full h-[2px] bg-[#1d2b53] mb-1" />
-                        <div className="w-full h-[2px] bg-[#1d2b53] mb-1" />
-                        <div className="w-[80%] h-[2px] bg-[#1d2b53] mb-2" />
-                        <div className="w-6 h-6 bg-[#29adff]" />
-                      </div>
-                      <div className="w-[50px] h-[65px] bg-[#29adff] border-2 border-[#1d2b53] flex flex-col items-center justify-center p-1">
-                        <div className="w-full h-[2px] bg-white mb-1" />
-                        <div className="w-full h-[2px] bg-white mb-1" />
-                        <div className="w-[80%] h-[2px] bg-white mb-2" />
-                        <div className="w-6 h-6 bg-[#1d2b53]" />
-                      </div>
+          <div ref={howItWorks.ref} style={howItWorks.style}>
+            <PixelBox color="#29adff" className="max-w-4xl mx-auto bg-[#1d2b53] p-5 sm:p-12" beam>
+              <div className="grid lg:grid-cols-2 gap-8 sm:gap-10 lg:gap-14">
+                <div>
+                  <p className="text-[#ff77a8] text-[9px] sm:text-[11px] mb-4 sm:mb-5">&lt; HOW TO PLAY &gt;</p>
+                  <h2 className="text-[18px] sm:text-[30px] lg:text-[38px] text-[#fff1e8] leading-[1.7]">
+                    Sign up.<br />
+                    Get texted.<br />
+                    Meet someone<br />
+                    <span
+                      className="text-[#ff004d] underline decoration-4"
+                      style={{ textUnderlineOffset: "8px", textShadow: "0 0 8px #ff004d, 0 0 20px #ff004d55" }}
+                    >
+                      real.
+                    </span>
+                  </h2>
+                </div>
+                <div className="flex flex-col justify-center space-y-5 sm:space-y-7">
+                  {[
+                    "Curate your profile and invite your friend.",
+                    "Tell bubl your preferences by Wednesday 11:59 PM.",
+                    "Every Thursday, receive two new matches for you and your friend.",
+                    "Reply Yes — we set the date.",
+                    "Ages are carefully matched for safety.",
+                  ].map((text, i) => (
+                    <div key={i} className="flex gap-3 sm:gap-4 items-start">
+                      <span
+                        className="text-[12px] sm:text-[14px] shrink-0"
+                        style={{ color: "#ffec27", textShadow: "0 0 6px #ffec2766" }}
+                      >
+                        [{i + 1}]
+                      </span>
+                      <p className="text-[#c2c3c7] text-[9px] sm:text-[11px] leading-[2.2]">{text}</p>
                     </div>
-                    <span className="text-[#29adff] text-[7px]">AI POWERED</span>
-                  </div>
+                  ))}
                 </div>
               </div>
-
-              {/* Column 2 — Learns preferences */}
-              <div className="flex flex-col items-center text-center gap-4 sm:gap-5">
-                <p className="text-[#fff1e8] text-[10px] sm:text-[14px] leading-[1.8]">bubl learns your<br />preferences</p>
-                <div className="bg-[#1d2b53] border-4 border-[#ff77a8] p-4 sm:p-6 w-full h-[160px] sm:h-[180px] flex items-center justify-center" style={{ boxShadow: "4px 4px 0 #993d64" }}>
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="relative">
-                      <div className="w-[70px] h-[85px] bg-[#0d0d1a] border-2 border-[#ff77a8] flex items-center justify-center">
-                        {/* 8-bit pixel smiley face */}
-                        <svg width="40" height="40" viewBox="0 0 16 16" style={{ imageRendering: "pixelated" }}>
-                          {/* Outline */}
-                          <rect x="4" y="0" width="8" height="1" fill="#8a6800" />
-                          <rect x="2" y="1" width="2" height="1" fill="#8a6800" /><rect x="12" y="1" width="2" height="1" fill="#8a6800" />
-                          <rect x="1" y="2" width="1" height="1" fill="#8a6800" /><rect x="14" y="2" width="1" height="1" fill="#8a6800" />
-                          <rect x="0" y="3" width="1" height="3" fill="#8a6800" /><rect x="15" y="3" width="1" height="3" fill="#8a6800" />
-                          <rect x="0" y="6" width="1" height="4" fill="#8a6800" /><rect x="15" y="6" width="1" height="4" fill="#8a6800" />
-                          <rect x="0" y="10" width="1" height="2" fill="#8a6800" /><rect x="15" y="10" width="1" height="2" fill="#8a6800" />
-                          <rect x="1" y="12" width="1" height="1" fill="#8a6800" /><rect x="14" y="12" width="1" height="1" fill="#8a6800" />
-                          <rect x="2" y="13" width="2" height="1" fill="#8a6800" /><rect x="12" y="13" width="2" height="1" fill="#8a6800" />
-                          <rect x="4" y="14" width="8" height="1" fill="#8a6800" />
-                          {/* Yellow fill */}
-                          <rect x="4" y="1" width="8" height="1" fill="#ffdd00" />
-                          <rect x="2" y="2" width="12" height="1" fill="#ffdd00" />
-                          <rect x="1" y="3" width="14" height="3" fill="#ffdd00" />
-                          <rect x="1" y="6" width="14" height="4" fill="#ffdd00" />
-                          <rect x="1" y="10" width="14" height="2" fill="#ffdd00" />
-                          <rect x="2" y="12" width="12" height="1" fill="#ffdd00" />
-                          <rect x="4" y="13" width="8" height="1" fill="#ffdd00" />
-                          {/* Orange shading on right/bottom */}
-                          <rect x="13" y="3" width="2" height="6" fill="#e8a800" />
-                          <rect x="12" y="10" width="3" height="2" fill="#e8a800" />
-                          <rect x="10" y="12" width="4" height="1" fill="#e8a800" />
-                          {/* Eyes — squinting */}
-                          <rect x="4" y="4" width="1" height="1" fill="#5a3800" /><rect x="6" y="4" width="1" height="1" fill="#5a3800" />
-                          <rect x="5" y="5" width="1" height="1" fill="#5a3800" />
-                          <rect x="9" y="4" width="1" height="1" fill="#5a3800" /><rect x="11" y="4" width="1" height="1" fill="#5a3800" />
-                          <rect x="10" y="5" width="1" height="1" fill="#5a3800" />
-                          {/* Mouth — open grin */}
-                          <rect x="5" y="8" width="6" height="1" fill="#5a3800" />
-                          <rect x="5" y="9" width="6" height="2" fill="#c45000" />
-                          <rect x="5" y="9" width="6" height="1" fill="#fff" />
-                          <rect x="5" y="10" width="6" height="1" fill="#c45000" />
-                        </svg>
-                      </div>
-                      {/* Scan line — sweeps top to bottom then back */}
-                      <div className="absolute -left-3 w-[calc(100%+24px)] h-[2px] bg-[#ff77a8]" style={{ animation: "scan-sweep 2.5s ease-in-out infinite" }} />
-                    </div>
-                    <span className="text-[#ff77a8] text-[7px]">SCANNING</span>
-                    <div className="flex gap-1.5">
-                      <span className="text-[14px]">&#x1F3C8;</span>
-                      <span className="text-[14px]">&#x1F3B8;</span>
-                      <span className="text-[14px]">&#x1F45F;</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Column 3 — Finds the one */}
-              <div className="flex flex-col items-center text-center gap-4 sm:gap-5">
-                <p className="text-[#fff1e8] text-[10px] sm:text-[14px] leading-[1.8]">Scans the entire pool<br />to find the one</p>
-                <div className="bg-[#1d2b53] border-4 border-[#ffec27] p-4 sm:p-6 w-full h-[160px] sm:h-[180px] flex items-center justify-center" style={{ boxShadow: "4px 4px 0 #998d17" }}>
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="bg-[#2a2a2a] border-4 border-[#5f574f] p-2 rounded-sm">
-                      <div className="w-[60px] h-[45px] bg-[#0d0d1a] relative overflow-hidden flex items-center justify-center">
-                        <div className="absolute inset-0 opacity-20" style={{
-                          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, #fff 3px, #fff 4px)",
-                          animation: "blink-pixel 0.5s step-end infinite"
-                        }} />
-                        <div className="flex gap-2 relative z-10 items-center justify-center">
-                          <PixelHeart size={16} />
-                          <PixelHeart size={16} />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="w-[30px] h-[4px] bg-[#5f574f]" />
-                    <span className="text-[#ffec27] text-[7px]">MATCH FOUND</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            </PixelBox>
           </div>
         </section>
 
+
         {/* ─── Pull quote ─── */}
         <section className="py-14 sm:py-24 px-4 sm:px-6">
-          <PixelBox color="#ff77a8" className="max-w-3xl mx-auto bg-[#1d2b53] p-5 sm:p-12 text-center">
-            <p className="text-[10px] sm:text-[16px] lg:text-[18px] text-[#fff1e8] leading-[2.4]">
-              "Instagram gave me digital<br />
-              <span className="text-[#7e2553]">'connections.'</span><br />
-              Bubl gave me something<br />
-              <span className="text-[#ff004d] underline decoration-4" style={{ textUnderlineOffset: "8px" }}>real</span>."
-            </p>
-            <p className="mt-4 sm:mt-6 text-[8px] sm:text-[10px] text-[#5f574f] uppercase">— actual high schooler, probably</p>
-          </PixelBox>
+          <div ref={quote.ref} style={quote.style}>
+            <PixelBox color="#ff77a8" className="max-w-3xl mx-auto bg-[#1d2b53] p-5 sm:p-12 text-center" beam>
+              <p className="text-[10px] sm:text-[16px] lg:text-[18px] text-[#fff1e8] leading-[2.4]">
+                "Instagram gave me digital<br />
+                <span className="text-[#7e2553]">'connections.'</span><br />
+                Bubl gave me something<br />
+                <span
+                  className="text-[#ff004d] underline decoration-4"
+                  style={{ textUnderlineOffset: "8px", textShadow: "0 0 10px #ff004d, 0 0 25px #ff004d55" }}
+                >
+                  real
+                </span>."
+              </p>
+              <p className="mt-4 sm:mt-6 text-[8px] sm:text-[10px] text-[#5f574f] uppercase">— actual high schooler, probably</p>
+            </PixelBox>
+          </div>
         </section>
 
         {/* ─── iMessage demo ─── */}
         <section className="py-16 sm:py-32 px-4 sm:px-6">
-          <PixelBox color="#29adff" className="max-w-4xl mx-auto bg-[#1d2b53] p-5 sm:p-12">
-            <div className="flex flex-col lg:flex-row items-center lg:items-start gap-8 sm:gap-12 lg:gap-16">
-              <div className="flex justify-center lg:justify-start">
-                <PhoneMockup />
-              </div>
-              <div className="lg:pt-8">
-                <p className="text-[#ff77a8] text-[9px] sm:text-[11px] mb-4 sm:mb-5">&lt; NO APP NEEDED &gt;</p>
-                <h2 className="text-[16px] sm:text-[28px] lg:text-[34px] text-[#fff1e8] leading-[1.7] mb-4 sm:mb-5">
-                  bubl lives in your texts.
-                </h2>
-                <p className="text-[#c2c3c7] text-[9px] sm:text-[11px] leading-[2.2] max-w-sm">
-                  We text you. You reply yes. We reveal your match. 30 seconds, never leave iMessage.
-                </p>
-                <div className="mt-6 sm:mt-8 inline-block bg-[#29adff] text-[#1d2b53] px-3 sm:px-4 py-2 text-[9px] sm:text-[11px]">
-                  blue bubbles only
+          <div ref={imessage.ref} style={imessage.style}>
+            <PixelBox color="#29adff" className="max-w-4xl mx-auto bg-[#1d2b53] p-5 sm:p-12" beam>
+              <div className="flex flex-col lg:flex-row items-center lg:items-start gap-8 sm:gap-12 lg:gap-16">
+                <div className="flex justify-center lg:justify-start">
+                  <PhoneMockup />
+                </div>
+                <div className="lg:pt-8">
+                  <p className="text-[#ff77a8] text-[9px] sm:text-[11px] mb-4 sm:mb-5">&lt; NO APP NEEDED &gt;</p>
+                  <h2
+                    className="text-[16px] sm:text-[28px] lg:text-[34px] text-[#fff1e8] leading-[1.7] mb-4 sm:mb-5"
+                    style={{ textShadow: "0 0 20px #fff1e822" }}
+                  >
+                    bubl lives in your texts.
+                  </h2>
+                  <p className="text-[#c2c3c7] text-[9px] sm:text-[11px] leading-[2.2] max-w-sm">
+                    We text you. You reply yes. We reveal your match. 30 seconds, never leave iMessage.
+                  </p>
+                  <div
+                    className="mt-6 sm:mt-8 inline-block bg-[#29adff] text-[#1d2b53] px-3 sm:px-4 py-2 text-[9px] sm:text-[11px]"
+                    style={{ textShadow: "none", boxShadow: "0 0 12px #29adff44" }}
+                  >
+                    blue bubbles only
+                  </div>
                 </div>
               </div>
-            </div>
-          </PixelBox>
+            </PixelBox>
+          </div>
         </section>
 
         {/* ─── Photo collage ─── */}
         <section className="py-16 sm:py-32 px-4 sm:px-6">
-          <p className="text-center text-[#ff77a8] text-[10px] sm:text-[13px] mb-8 sm:mb-12">&lt; REAL PEOPLE. REAL NIGHTS. &gt;</p>
-          {/* Mobile stack */}
-          <div className="flex flex-col items-center gap-6 sm:hidden">
-            {["/elsam4.jpg", "/rave1.jpg", "/vibes.jpg"].map((src, i) => (
-              <PixelBox key={i} color={["#ff004d", "#29adff", "#ffec27"][i]} className="bg-[#1d2b53] p-0 overflow-hidden">
-                <img src={src} alt="" className="w-[260px] max-w-[calc(100vw-4rem)] aspect-[4/3] object-cover block" style={{ imageRendering: "pixelated" }} />
-              </PixelBox>
-            ))}
-          </div>
-          {/* Desktop overlapping */}
-          <div className="hidden sm:block relative max-w-4xl mx-auto" style={{ minHeight: "520px" }}>
-            <div className="absolute left-0 top-0 w-[44%]" style={{ transform: "rotate(-2deg)" }}>
-              <PixelBox color="#ff004d" className="bg-[#1d2b53] p-0 overflow-hidden">
-                <img src="/elsam4.jpg" alt="" className="w-full aspect-[4/3] object-cover block" style={{ imageRendering: "pixelated" }} />
-              </PixelBox>
+          <div ref={photos.ref} style={photos.style}>
+            <p
+              className="text-center text-[#ff77a8] text-[10px] sm:text-[13px] mb-8 sm:mb-12"
+              style={{ textShadow: "0 0 8px #ff77a844" }}
+            >
+              &lt; REAL PEOPLE. REAL NIGHTS. &gt;
+            </p>
+            {/* Mobile stack */}
+            <div className="flex flex-col items-center gap-6 sm:hidden">
+              {["/elsam4.jpg", "/rave1.jpg", "/vibes.jpg"].map((src, i) => (
+                <PixelBox key={i} color={["#ff004d", "#29adff", "#ffec27"][i]} className="bg-[#1d2b53] p-0 overflow-hidden">
+                  <img src={src} alt="" className="w-[260px] max-w-[calc(100vw-4rem)] aspect-[4/3] object-cover block" style={{ imageRendering: "pixelated" }} />
+                </PixelBox>
+              ))}
             </div>
-            <div className="absolute right-0 top-4 w-[42%]" style={{ transform: "rotate(1.5deg)" }}>
-              <PixelBox color="#29adff" className="bg-[#1d2b53] p-0 overflow-hidden">
-                <img src="/rave1.jpg" alt="" className="w-full aspect-[4/3] object-cover block" style={{ imageRendering: "pixelated" }} />
-              </PixelBox>
-            </div>
-            <div className="absolute left-[22%] bottom-[40px] w-[44%] z-20" style={{ transform: "rotate(1deg)" }}>
-              <PixelBox color="#ffec27" className="bg-[#1d2b53] p-0 overflow-hidden">
-                <img src="/vibes.jpg" alt="" className="w-full aspect-[16/9] object-cover block" style={{ imageRendering: "pixelated" }} />
-              </PixelBox>
-            </div>
-            {/* Stat badges */}
-            <div className="absolute top-[-10px] left-[30%] z-10 bg-[#ff004d] px-4 py-3 border-4 border-[#fff1e8]">
-              <p className="text-[#fff1e8] text-[22px] leading-none">100+</p>
-              <p className="text-[#1d2b53] text-[8px] mt-1 uppercase">Matches</p>
-            </div>
-            <div className="absolute top-[45%] right-[4%] z-10 bg-[#ffec27] px-4 py-3 border-4 border-[#fff1e8]">
-              <p className="text-[#1d2b53] text-[22px] leading-none">0</p>
-              <p className="text-[#1d2b53]/60 text-[8px] mt-1 uppercase">Swipes</p>
+            {/* Desktop overlapping */}
+            <div className="hidden sm:block relative max-w-4xl mx-auto" style={{ minHeight: "520px" }}>
+              <div className="absolute left-0 top-0 w-[44%] hover-lift" style={{ transform: "rotate(-2deg)" }}>
+                <PixelBox color="#ff004d" className="bg-[#1d2b53] p-0 overflow-hidden">
+                  <img src="/elsam4.jpg" alt="" className="w-full aspect-[4/3] object-cover block" style={{ imageRendering: "pixelated" }} />
+                </PixelBox>
+              </div>
+              <div className="absolute right-0 top-4 w-[42%] hover-lift" style={{ transform: "rotate(1.5deg)" }}>
+                <PixelBox color="#29adff" className="bg-[#1d2b53] p-0 overflow-hidden">
+                  <img src="/rave1.jpg" alt="" className="w-full aspect-[4/3] object-cover block" style={{ imageRendering: "pixelated" }} />
+                </PixelBox>
+              </div>
+              <div className="absolute left-[22%] bottom-[40px] w-[44%] z-20 hover-lift" style={{ transform: "rotate(1deg)" }}>
+                <PixelBox color="#ffec27" className="bg-[#1d2b53] p-0 overflow-hidden">
+                  <img src="/vibes.jpg" alt="" className="w-full aspect-[16/9] object-cover block" style={{ imageRendering: "pixelated" }} />
+                </PixelBox>
+              </div>
+              {/* Stat badges with neon glow */}
+              <div
+                className="absolute top-[-10px] left-[30%] z-10 bg-[#ff004d] px-4 py-3 border-4 border-[#fff1e8]"
+                style={{ boxShadow: "0 0 15px #ff004d66" }}
+              >
+                <p className="text-[#fff1e8] text-[22px] leading-none"><AnimCounter target={100} suffix="+" /></p>
+                <p className="text-[#1d2b53] text-[8px] mt-1 uppercase">Matches</p>
+              </div>
+              <div
+                className="absolute top-[45%] right-[4%] z-10 bg-[#ffec27] px-4 py-3 border-4 border-[#fff1e8]"
+                style={{ boxShadow: "0 0 15px #ffec2766" }}
+              >
+                <p className="text-[#1d2b53] text-[22px] leading-none">0</p>
+                <p className="text-[#1d2b53]/60 text-[8px] mt-1 uppercase">Swipes</p>
+              </div>
             </div>
           </div>
         </section>
 
         {/* ─── Signup form ─── */}
         <section ref={signupRef} className="py-16 sm:py-32 px-4 sm:px-6">
-          <PixelBox color="#ffec27" className="max-w-md mx-auto bg-[#1d2b53] p-5 sm:p-10">
-            {formState === "success" ? (
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-6 border-4 border-[#00e436] bg-[#1d2b53] flex items-center justify-center">
-                  <Check className="w-8 h-8 text-[#00e436]" strokeWidth={3} />
-                </div>
-                <h2 className="text-[16px] sm:text-[20px] text-[#00e436] mb-4">LEVEL UP!</h2>
-                <p className="text-[#c2c3c7] text-[8px] sm:text-[10px] leading-[2.2] mb-3">
-                  we're busy curating your perfect match..
-                </p>
-                <p className="text-[#5f574f] text-[8px] sm:text-[9px] leading-[2] mb-6">
-                  text bubl to receive your match!
-                </p>
-                <a
-                  href="sms:textbubl@icloud.com&body=Hey Bubl, I've signed up!"
-                  className="inline-block px-6 sm:px-8 py-3 border-4 border-[#ff004d] bg-[#ff004d] text-white text-[9px] sm:text-[11px] hover:bg-[#ff77a8] transition-none"
-                  style={{ boxShadow: "4px 4px 0 #7e2553" }}
-                >
-                  TEXT BUBL &gt;&gt;
-                </a>
-              </div>
-            ) : (
-              <>
-                <p className="text-[#ff77a8] text-[9px] sm:text-[11px] mb-3 sm:mb-4 text-center">&lt; WAITLIST &gt;</p>
-                <h2 className="text-[18px] sm:text-[32px] text-center mb-6 sm:mb-8 text-[#ffec27]">
-                  Get in.
-                </h2>
-
-                <div className="space-y-4">
-                  <input
-                    type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="&gt; name"
-                    className={inputClass} style={px}
-                  />
-                  <PixelSelect
-                    value={gender}
-                    onChange={setGender}
-                    placeholder="&gt; gender"
-                    options={[{ value: "male", label: "Male" }, { value: "female", label: "Female" }]}
-                  />
-                  <input
-                    type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="&gt; age"
-                    className={inputClass} style={px}
-                  />
-                  <input
-                    type="tel" value={phone} onChange={(e) => setPhone(fmt(e.target.value))} placeholder="&gt; phone (iMessage)"
-                    className={inputClass} style={px}
-                  />
-                  <PixelSelect
-                    value={school}
-                    onChange={setSchool}
-                    placeholder="&gt; school"
-                    options={[
-                      { value: "Portola High School", label: "Portola High School" },
-                      { value: "Irvine High School", label: "Irvine High School" },
-                      { value: "Northwood High School", label: "Northwood High School" },
-                      { value: "Woodbridge High School", label: "Woodbridge High School" },
-                      { value: "Beckman High School", label: "Beckman High School" },
-                      { value: "Crean Lutheran High School", label: "Crean Lutheran High School" },
-                      { value: "University High School", label: "University High School" },
-                    ]}
-                  />
-
-                  {error && <p className="text-[9px] sm:text-[11px] text-[#ff004d] text-center">! {error}</p>}
-
-                  <button
-                    onClick={submit}
-                    disabled={formState === "submitting"}
-                    className="w-full py-3 sm:py-4 border-4 border-[#00e436] bg-[#00e436] text-[#1d2b53] text-[10px] sm:text-[13px] hover:bg-[#29adff] hover:border-[#29adff] active:translate-x-[2px] active:translate-y-[2px] transition-none disabled:opacity-50 min-h-[44px]"
-                    style={{ boxShadow: "4px 4px 0 #008751" }}
+          <div ref={signup.ref} style={signup.style}>
+            <PixelBox color="#ffec27" className="max-w-md mx-auto bg-[#1d2b53] p-5 sm:p-10" beam>
+              {formState === "success" ? (
+                <div className="text-center">
+                  <div className="w-16 h-16 mx-auto mb-6 border-4 border-[#00e436] bg-[#1d2b53] flex items-center justify-center" style={{ boxShadow: "0 0 20px #00e43644" }}>
+                    <Check className="w-8 h-8 text-[#00e436]" strokeWidth={3} />
+                  </div>
+                  <h2 className="text-[16px] sm:text-[20px] text-[#00e436] mb-4" style={{ textShadow: "0 0 10px #00e43666" }}>YOU'RE IN!</h2>
+                  <p className="text-[#c2c3c7] text-[8px] sm:text-[10px] leading-[2.2] mb-3">
+                    we're busy curating your perfect match..
+                  </p>
+                  <p className="text-[#5f574f] text-[8px] sm:text-[9px] leading-[2] mb-6">
+                    text bubl to receive your match!
+                  </p>
+                  <a
+                    href="sms:textbubl@icloud.com&body=Hey Bubl, I've signed up!"
+                    className="inline-block px-6 sm:px-8 py-3 border-4 border-[#ff004d] bg-[#ff004d] text-white text-[9px] sm:text-[11px] hover:bg-[#ff77a8] transition-none"
+                    style={{ boxShadow: "4px 4px 0 #7e2553" }}
                   >
-                    {formState === "submitting" ? "LOADING..." : "> JOIN WAITLIST"}
-                  </button>
+                    TEXT BUBL &gt;&gt;
+                  </a>
                 </div>
-              </>
-            )}
-          </PixelBox>
+              ) : (
+                <>
+                  <p className="text-[#ff77a8] text-[9px] sm:text-[11px] mb-3 sm:mb-4 text-center">&lt; PLAYER SELECT &gt;</p>
+                  <h2
+                    className="text-[18px] sm:text-[32px] text-center mb-6 sm:mb-8 neon-yellow"
+                  >
+                    Get Matched.
+                  </h2>
+
+                  <div className="space-y-4">
+                    <input
+                      type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="> name"
+                      className={inputClass} style={px}
+                    />
+                    <PixelSelect
+                      value={gender}
+                      onChange={(v) => setGender(v as "guy" | "girl")}
+                      placeholder="> gender"
+                      options={[{ value: "guy", label: "Guy" }, { value: "girl", label: "Girl" }]}
+                    />
+                    <input
+                      type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="> age"
+                      className={inputClass} style={px}
+                    />
+                    <input
+                      type="tel" value={phone} onChange={(e) => setPhone(fmt(e.target.value))} placeholder="> phone (iMessage)"
+                      className={inputClass} style={px}
+                    />
+                    <PixelSelect
+                      value={school}
+                      onChange={setSchool}
+                      placeholder="> school"
+                      options={[
+                        { value: "Portola High School", label: "Portola High School" },
+                        { value: "Irvine High School", label: "Irvine High School" },
+                        { value: "Northwood High School", label: "Northwood High School" },
+                        { value: "Woodbridge High School", label: "Woodbridge High School" },
+                        { value: "Beckman High School", label: "Beckman High School" },
+                        { value: "Crean Lutheran High School", label: "Crean Lutheran High School" },
+                        { value: "University High School", label: "University High School" },
+                      ]}
+                    />
+
+                    {error && <p className="text-[9px] sm:text-[11px] text-[#ff004d] text-center">! {error}</p>}
+
+                    <button
+                      onClick={submit}
+                      disabled={formState === "submitting"}
+                      className="w-full py-3 sm:py-4 border-4 border-[#00e436] bg-[#00e436] text-[#1d2b53] text-[10px] sm:text-[13px] hover:bg-[#29adff] hover:border-[#29adff] active:translate-x-[2px] active:translate-y-[2px] transition-none disabled:opacity-50 min-h-[44px]"
+                      style={{ boxShadow: "4px 4px 0 #008751" }}
+                    >
+                      {formState === "submitting" ? "MATCHING..." : "GET MATCHED"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </PixelBox>
+          </div>
         </section>
 
-        {/* ─── FAQ (interactive accordion) ─── */}
+        {/* ─── FAQ ─── */}
         <section className="py-16 sm:py-32 px-4 sm:px-6">
-          <PixelBox color="#29adff" className="max-w-2xl mx-auto bg-[#1d2b53] p-5 sm:p-10">
-            <p className="text-[#ffec27] text-[11px] sm:text-[14px] mb-6 sm:mb-8">&lt; FAQ &gt;</p>
-            <FaqItem q="How does matching work?" a="Every Thursday we pair everyone and send results through iMessage. Both say yes, we set the event." />
-            <FaqItem q="Do I need an app?" a="No. iMessage only." />
-            <FaqItem q="Why school ID?" a="We verify every user is a real student. Your ID is never shared." />
-            <FaqItem q="What if I'm not into my match?" a="Reply 'no'. Back in the pool next week." />
-            <FaqItem q="Is it free?" a="Yes." />
-          </PixelBox>
+          <div ref={faq.ref} style={faq.style}>
+            <PixelBox color="#29adff" className="max-w-2xl mx-auto bg-[#1d2b53] p-5 sm:p-10">
+              <p className="text-[#ffec27] text-[11px] sm:text-[14px] mb-6 sm:mb-8" style={{ textShadow: "0 0 8px #ffec2744" }}>&lt; FAQ &gt;</p>
+              <FaqItem q="How does matching work?" a="Every Thursday we pair everyone and send results through iMessage. Both say yes, we set the event." />
+              <FaqItem q="Do I need an app?" a="No. iMessage only." />
+              <FaqItem q="Why school ID?" a="We verify every user is a real student. Your ID is never shared." />
+              <FaqItem q="What if I'm not into my match?" a="Reply 'no'. Back in the pool next week." />
+              <FaqItem q="Is it free?" a="Yes." />
+            </PixelBox>
+          </div>
         </section>
 
         {/* ─── Footer ─── */}
         <footer className="py-8 sm:py-10 px-4 sm:px-6 border-t-4 border-[#29adff]">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <span className="text-[#ff004d] text-[11px] sm:text-[14px]">bubl.</span>
+          <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <span className="text-[#ff004d] text-[11px] sm:text-[14px]" style={{ textShadow: "0 0 8px #ff004d44" }}>bubl.</span>
             <div className="flex items-center gap-3">
               <PixelHeart size={16} />
               <p className="text-[#5f574f] text-[8px] sm:text-[10px]">every thursday</p>
             </div>
+            <p className="text-[#5f574f] text-[6px] sm:text-[8px]">GAME OVER? NEVER.</p>
           </div>
         </footer>
 

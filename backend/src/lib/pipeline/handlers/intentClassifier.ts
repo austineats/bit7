@@ -39,7 +39,7 @@ Only use "ambiguous" for truly meaningless prompts (1-2 generic words).
 Only use "out_of_scope" for clearly non-agent requests.`;
 
 export async function classifyIntent(prompt: string): Promise<ClassifiedIntent> {
-  const modelId = process.env.AI_MODEL_FAST || "gemini-flash-lite-latest";
+  const modelId = process.env.AI_MODEL_FAST || "gpt-4o-mini";
   const client = getUnifiedClient();
 
   try {

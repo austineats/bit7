@@ -25,7 +25,7 @@ export async function analyzeImage(
 
   const client = getRawLLMClient();
   const response = await client.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 200,
     messages: [{ role: "user", content: [
       { type: "text", text: prompt },

@@ -70,7 +70,7 @@ export async function extractMemories(
   try {
     const llm = getRawLLMClient();
     const completion = await llm.chat.completions.create({
-      model: "gemini-flash-lite-latest",
+      model: "gpt-4o-mini",
       max_tokens: 300,
       temperature: 0,
       messages: [

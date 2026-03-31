@@ -38,7 +38,7 @@ chatRouter.post("/:id/chat", chatRateLimiter, async (req, res) => {
 
   try {
     const response = await client.messages.create({
-      model: process.env.AI_MODEL_FAST || "gemini-flash-lite-latest",
+      model: process.env.AI_MODEL_FAST || "gpt-4o-mini",
       max_tokens: 1500,
       system: body.system,
       messages: [{ role: "user", content: body.message }],

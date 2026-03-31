@@ -88,7 +88,6 @@ export function SignupPage() {
     <div className="min-h-screen text-[#fff1e8]" style={{ ...px, background: "#0d0d1a" }}>
       {/* Pixel star field background */}
       <div className="fixed inset-0 z-0" style={{ background: "linear-gradient(180deg, #0d0d1a 0%, #1d2b53 100%)" }}>
-        {/* Decorative pixel dots */}
         <div className="absolute w-1 h-1 bg-[#ffec27] top-[10%] left-[15%]" />
         <div className="absolute w-1 h-1 bg-[#fff1e8] top-[20%] left-[70%]" />
         <div className="absolute w-[2px] h-[2px] bg-[#29adff] top-[35%] left-[85%]" />

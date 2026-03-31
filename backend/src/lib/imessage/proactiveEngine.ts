@@ -88,7 +88,7 @@ async function executeMorningBriefing(
   // Compose the briefing via LLM
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 200,
     temperature: 0.7,
     messages: [
@@ -130,7 +130,7 @@ async function executeNudge(
 
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 100,
     temperature: 0.7,
     messages: [
@@ -193,7 +193,7 @@ async function executeReengagement(
 
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 100,
     temperature: 0.8,
     messages: [

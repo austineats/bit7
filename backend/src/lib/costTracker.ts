@@ -33,7 +33,7 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
   "claude-haiku-4-5":        { input: 0.80, output: 4, cacheWrite: 1, cacheRead: 0.08 },
   "claude-haiku-4-5-20251001": { input: 0.80, output: 4, cacheWrite: 1, cacheRead: 0.08 },
   // Gemini 3.1 Flash-Lite
-  "gemini-flash-lite-latest":               { input: 0.25, output: 1.50, cacheWrite: 0.025, cacheRead: 0.025 },
+  "gpt-4o-mini":               { input: 0.25, output: 1.50, cacheWrite: 0.025, cacheRead: 0.025 },
 };
 
 export function getModelPricing(modelId: string): ModelPricing {
@@ -46,7 +46,7 @@ export function getModelPricing(modelId: string): ModelPricing {
   // Infer from name patterns
   if (/opus/i.test(modelId)) return MODEL_PRICING["claude-opus-4-6"];
   if (/haiku/i.test(modelId)) return MODEL_PRICING["claude-haiku-4-5"];
-  if (/gemini/i.test(modelId)) return MODEL_PRICING["gemini-flash-lite-latest"];
+  if (/gemini/i.test(modelId)) return MODEL_PRICING["gpt-4o-mini"];
   // Default to Sonnet pricing
   return MODEL_PRICING["claude-sonnet-4-6"];
 }

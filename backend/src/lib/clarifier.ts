@@ -56,7 +56,7 @@ export async function clarifyPrompt(prompt: string): Promise<ClarifyResult> {
 
   try {
     const response = await client.messages.create({
-      model: process.env.AI_MODEL_FAST || "gemini-flash-lite-latest",
+      model: process.env.AI_MODEL_FAST || "gpt-4o-mini",
       max_tokens: 500,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],

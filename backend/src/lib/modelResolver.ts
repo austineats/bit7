@@ -11,9 +11,9 @@ export type ModelTier = "fast" | "standard" | "premium";
 export type ModelStage = "reasoning" | "codegen" | "critic" | "repair";
 
 const GEMINI_DEFAULTS: Record<ModelTier, string> = {
-  fast: "gemini-flash-lite-latest",
-  standard: "gemini-flash-lite-latest",
-  premium: "gemini-flash-lite-latest",
+  fast: "gpt-4o-mini",
+  standard: "gpt-4o-mini",
+  premium: "gpt-4o-mini",
 };
 
 const TIER_ENV_KEYS: Record<ModelTier, string> = {

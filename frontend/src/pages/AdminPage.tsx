@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { Search, X, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Search, Trash2, ChevronLeft, ChevronRight, Users, UserCheck, Clock, Eye, BarChart3, Activity as ActivityIcon, Globe, Bell, Settings, Menu } from "lucide-react";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface Conversation {
   id: string;
@@ -119,42 +120,18 @@ interface Visit {
 }
 
 const ADMIN_PASS = "bubl2026";
-const px = { fontFamily: "'Press Start 2P', monospace" } as const;
-
-const ACTION_COLORS: Record<string, string> = {
-  signup: "#ffec27", team_created: "#29adff", team_joined: "#00e436",
-  ready_up: "#ff77a8", message: "#c2c3c7", signin: "#29adff",
-  admin_delete: "#ff004d", first_message: "#ff77a8", unknown_message: "#5f574f",
-};
+const SIDEBAR_W = "w-[220px]";
 
 function timeAgo(date: string): string {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "now";
+  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h`;
   return `${Math.floor(hrs / 24)}d`;
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <p className="text-[#29adff] text-[7px] tracking-wider mb-1.5" style={px}>{label}</p>
-      {children}
-    </div>
-  );
-}
-
-function Badge({ text, color }: { text: string; color: string }) {
-  return (
-    <span className="text-[7px] px-2 py-0.5 border-2 inline-block" style={{ ...px, borderColor: color, color, background: `${color}10` }}>
-      {text}
-    </span>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
 export function AdminPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("bubl-admin") === "true");
   const [passInput, setPassInput] = useState("");
@@ -166,24 +143,25 @@ export function AdminPage() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [analytics, setAnalytics] = useState({ totalVisits: 0, todayVisits: 0, weekVisits: 0, activeLastHour: 0 });
 
-  const [tab, setTab] = useState<"users" | "guys" | "girls" | "teams" | "logs" | "visits">("users");
+  const [tab, setTab] = useState<"dashboard" | "users" | "guys" | "girls" | "teams" | "logs" | "visits">("dashboard");
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [visitFilter, setVisitFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState<Signup | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showConvos, setShowConvos] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const perPage = 25;
 
   useEffect(() => { if (authed) load(); }, [authed]);
+  useEffect(() => { setPage(1); setExpandedId(null); }, [tab, teamFilter, visitFilter, search]);
 
-  // ── Password gate ──
   if (!authed) {
     return (
-      <div className="min-h-screen bg-[#0d0d1a] flex items-center justify-center" style={px}>
-        <div className="text-center">
-          <h1 className="text-[20px] text-[#ff004d] mb-2">bubl.</h1>
-          <p className="text-[#c2c3c7] text-[9px] mb-8 tracking-widest">&lt; ADMIN &gt;</p>
+      <div className="min-h-screen bg-[#2c3e50] flex items-center justify-center font-['Open_Sans',sans-serif]">
+        <div className="bg-white rounded p-8 w-80 shadow-lg">
+          <h1 className="text-xl font-bold text-[#2c3e50] mb-1">bubl. admin</h1>
+          <p className="text-[#999] text-sm mb-5">Sign in to continue</p>
           <input
             type="password" value={passInput} autoFocus
             onChange={e => { setPassInput(e.target.value); setPassError(false); }}
@@ -193,17 +171,24 @@ export function AdminPage() {
                 else setPassError(true);
               }
             }}
-            placeholder="PASSWORD"
-            className={`w-[280px] px-4 py-3 border-4 ${passError ? "border-[#ff004d]" : "border-[#29adff]"} bg-[#1d2b53] text-white text-[11px] text-center placeholder-[#c2c3c7]/30 focus:outline-none focus:border-[#ffec27]`}
-            style={px}
+            placeholder="Password"
+            className={`w-full px-3 py-2.5 rounded border ${passError ? "border-red-400" : "border-[#ddd]"} text-sm text-[#333] focus:outline-none focus:border-[#1abc9c]`}
           />
-          {passError && <p className="text-[#ff004d] text-[9px] mt-3">WRONG PASSWORD</p>}
+          {passError && <p className="text-[#e74c3c] text-xs mt-2">Wrong password</p>}
+          <button
+            onClick={() => {
+              if (passInput === ADMIN_PASS) { sessionStorage.setItem("bubl-admin", "true"); setAuthed(true); }
+              else setPassError(true);
+            }}
+            className="w-full mt-4 py-2.5 bg-[#1abc9c] hover:bg-[#16a085] text-white rounded text-sm font-semibold"
+          >
+            Sign In
+          </button>
         </div>
       </div>
     );
   }
 
-  // ── Data loading ──
   async function load() {
     setLoading(true);
     try {
@@ -227,14 +212,14 @@ export function AdminPage() {
     if (!confirm("Remove user?")) return;
     await fetch(`/api/blind-date/admin/signups/${id}`, { method: "DELETE" }).catch(() => {});
     setSignups(p => p.filter(s => s.id !== id));
-    if (selectedUser?.id === id) setSelectedUser(null);
+    if (expandedId === id) setExpandedId(null);
   }
 
   async function removeTeam(id: string) {
     if (!confirm("Remove team?")) return;
     await fetch(`/api/blind-date/admin/teams/${id}`, { method: "DELETE" }).catch(() => {});
     setTeams(p => p.filter(t => t.id !== id));
-    if (selectedTeam?.id === id) setSelectedTeam(null);
+    if (expandedId === id) setExpandedId(null);
   }
 
   async function removeLog(id: string) {
@@ -247,17 +232,75 @@ export function AdminPage() {
     setVisits(p => p.filter(v => v.id !== id));
   }
 
-  // ── Derived data ──
   const fullTeams = teams.filter(t => t.status === "full");
   const waitingTeams = teams.filter(t => t.status === "waiting");
   const readyTeams = teams.filter(t => t.player1_ready && t.player2_ready);
-
   const guys = signups.filter(s => s.gender === "male");
   const girls = signups.filter(s => s.gender === "female");
 
-  const filteredUsers = signups.filter(s =>
+  // Chart data: traffic over last 7 days (hourly buckets for today, daily for past week)
+  const trafficByDay = useMemo(() => {
+    const days: Record<string, number> = {};
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      days[key] = 0;
+    }
+    for (const v of visits) {
+      const d = new Date(v.created_at);
+      const key = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      if (key in days) days[key]++;
+    }
+    return Object.entries(days).map(([name, visits]) => ({ name, visits }));
+  }, [visits]);
+
+  // Chart data: signups per day over last 7 days
+  const signupsByDay = useMemo(() => {
+    const days: Record<string, { guys: number; girls: number }> = {};
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      days[key] = { guys: 0, girls: 0 };
+    }
+    for (const s of signups) {
+      const d = new Date(s.created_at);
+      const key = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      if (key in days) {
+        if (s.gender === "male") days[key].guys++;
+        else if (s.gender === "female") days[key].girls++;
+      }
+    }
+    return Object.entries(days).map(([name, data]) => ({ name, ...data }));
+  }, [signups]);
+
+  // Chart data: hourly traffic for today
+  const trafficByHour = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const hours: Record<number, number> = {};
+    for (let h = 0; h <= now.getHours(); h++) hours[h] = 0;
+    for (const v of visits) {
+      const d = new Date(v.created_at);
+      if (d >= todayStart) {
+        const h = d.getHours();
+        if (h in hours) hours[h]++;
+      }
+    }
+    return Object.entries(hours).map(([h, count]) => ({
+      name: `${Number(h) % 12 || 12}${Number(h) < 12 ? "a" : "p"}`,
+      visits: count,
+    }));
+  }, [visits]);
+
+  let displayUsers = signups.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) || s.phone.includes(search)
   );
+  if (tab === "guys") displayUsers = displayUsers.filter(s => s.gender === "male");
+  if (tab === "girls") displayUsers = displayUsers.filter(s => s.gender === "female");
 
   let filteredTeams = teams;
   if (teamFilter === "full") filteredTeams = fullTeams;
@@ -270,272 +313,538 @@ export function AdminPage() {
   else if (visitFilter === "today") { const t = new Date(); t.setHours(0,0,0,0); filteredVisits = visits.filter(v => new Date(v.created_at) >= t); }
   else if (visitFilter === "week") filteredVisits = visits.filter(v => now - new Date(v.created_at).getTime() < 604800000);
 
-  // ── Stat click handler ──
-  function onStat(filter: string) {
-    if (["active1h", "today", "week", "alltime"].includes(filter)) { setTab("visits"); setVisitFilter(filter === "alltime" ? null : filter); setTeamFilter(null); }
-    else if (filter === "signups") { setTab("users"); setTeamFilter(null); setVisitFilter(null); }
-    else if (filter === "guys") { setTab("guys"); setTeamFilter(null); setVisitFilter(null); }
-    else if (filter === "girls") { setTab("girls"); setTeamFilter(null); setVisitFilter(null); }
-    else if (["teams", "full", "ready", "waiting"].includes(filter)) { setTab("teams"); setTeamFilter(filter === "teams" ? null : filter); setVisitFilter(null); }
-  }
+  const listLen = (tab === "users" || tab === "guys" || tab === "girls") ? displayUsers.length :
+    tab === "teams" ? filteredTeams.length : tab === "logs" ? activity.length :
+    tab === "visits" ? filteredVisits.length : 0;
+  const totalPages = Math.max(1, Math.ceil(listLen / perPage));
+  const slice = <T,>(arr: T[]) => arr.slice((page - 1) * perPage, page * perPage);
+
+  const sidebarItem = (key: string, label: string, icon: React.ReactNode) => (
+    <button
+      key={key}
+      onClick={() => { setTab(key as typeof tab); setTeamFilter(null); setVisitFilter(null); }}
+      className={`w-full flex items-center gap-3 px-5 py-2.5 text-[13px] text-left ${
+        tab === key
+          ? "bg-[#1abc9c] text-white"
+          : "text-[#aab2bd] hover:text-white hover:bg-white/5"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
+  const filterBtn = (label: string, value: string | null, current: string | null, set: (v: string | null) => void) =>
+    <button onClick={() => set(value)}
+      className={`px-3 py-1.5 text-xs rounded ${current === value ? "bg-[#1abc9c] text-white" : "bg-[#ecf0f1] text-[#7f8c8d] hover:bg-[#ddd]"}`}>
+      {label}
+    </button>;
+
+  const th = "text-left px-4 py-3 text-[11px] font-semibold text-[#7f8c8d] uppercase tracking-wider bg-[#f7f9fa] border-b border-[#eee]";
+  const td = "px-4 py-3 text-[13px] text-[#555] border-b border-[#f0f0f0]";
+
+  // Stat cards for dashboard
+  const statCards = [
+    { label: "Total Signups", value: signups.length, bg: "bg-[#1abc9c]", icon: <Users className="w-6 h-6 text-white/80" /> },
+    { label: "Guys", value: guys.length, bg: "bg-[#3498db]", icon: <Users className="w-6 h-6 text-white/80" /> },
+    { label: "Girls", value: girls.length, bg: "bg-[#e74c3c]", icon: <Users className="w-6 h-6 text-white/80" /> },
+    { label: "Teams", value: teams.length, bg: "bg-[#f39c12]", icon: <UserCheck className="w-6 h-6 text-white/80" /> },
+  ];
+
+  const statCards2 = [
+    { label: "Full Teams", value: fullTeams.length, bg: "bg-[#2ecc71]", icon: <UserCheck className="w-6 h-6 text-white/80" /> },
+    { label: "Ready", value: readyTeams.length, bg: "bg-[#9b59b6]", icon: <Clock className="w-6 h-6 text-white/80" /> },
+    { label: "Active (1h)", value: analytics.activeLastHour, bg: "bg-[#e67e22]", icon: <Eye className="w-6 h-6 text-white/80" /> },
+    { label: "Today Visits", value: analytics.todayVisits, bg: "bg-[#1abc9c]", icon: <Globe className="w-6 h-6 text-white/80" /> },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#0d0d1a] text-[#fff1e8] flex flex-col" style={px}>
+    <div className="min-h-screen bg-[#ecf0f1] font-['Open_Sans',sans-serif] text-[#333] flex">
 
-      {/* ── Top bar ── */}
-      <div className="border-b-4 border-[#29adff] bg-[#1d2b53]/80 px-4 py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <span className="text-[14px] text-[#ff004d]">bubl.</span>
-            <span className="text-[#c2c3c7] text-[8px]">ADMIN</span>
-          </div>
-          <button onClick={load} className="text-[#29adff] text-[7px] hover:text-[#ffec27]">REFRESH</button>
+      {/* Sidebar */}
+      <div className={`${SIDEBAR_W} bg-[#2c3e50] min-h-screen flex-shrink-0 flex flex-col ${sidebarOpen ? "" : "hidden"}`}>
+        <div className="px-5 py-4 flex items-center gap-2">
+          <span className="text-white text-lg font-bold">bubl.</span>
+          <span className="text-[#1abc9c] text-lg font-light">Admin</span>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {[
-            { v: analytics.activeLastHour, l: "ACTIVE 1H", c: "#00e436", f: "active1h" },
-            { v: analytics.todayVisits, l: "TODAY", c: "#29adff", f: "today" },
-            { v: analytics.weekVisits, l: "THIS WEEK", c: "#ff77a8", f: "week" },
-            { v: analytics.totalVisits, l: "ALL TIME", c: "#c2c3c7", f: "alltime" },
-            { v: signups.length, l: "SIGNUPS", c: "#ffec27", f: "signups" },
-            { v: guys.length, l: "GUYS", c: "#29adff", f: "guys" },
-            { v: girls.length, l: "GIRLS", c: "#ff77a8", f: "girls" },
-            { v: teams.length, l: "TEAMS", c: "#29adff", f: "teams" },
-            { v: fullTeams.length, l: "FULL", c: "#00e436", f: "full" },
-            { v: readyTeams.length, l: "READY", c: "#ff77a8", f: "ready" },
-            { v: waitingTeams.length, l: "WAITING", c: "#5f574f", f: "waiting" },
-          ].map((s, i) => (
-            <button key={i} onClick={() => onStat(s.f)}
-              className={`shrink-0 border-2 px-3 py-1.5 text-center hover:opacity-80 ${(teamFilter === s.f || visitFilter === s.f) ? "ring-2 ring-white" : ""}`}
-              style={{ borderColor: s.c, background: `${s.c}10` }}>
-              <p className="text-[11px]" style={{ color: s.c }}>{s.v}</p>
-              <p className="text-[5px] mt-0.5 text-[#c2c3c7]">{s.l}</p>
-            </button>
-          ))}
-        </div>
+
+        <nav className="flex-1 py-2">
+          <p className="px-5 py-2 text-[10px] font-bold text-[#607080] uppercase tracking-widest">Main</p>
+          {sidebarItem("dashboard", "Dashboard", <BarChart3 className="w-4 h-4" />)}
+
+          <p className="px-5 py-2 mt-3 text-[10px] font-bold text-[#607080] uppercase tracking-widest">Users</p>
+          {sidebarItem("users", "All Users", <Users className="w-4 h-4" />)}
+          {sidebarItem("guys", "Guys", <Users className="w-4 h-4" />)}
+          {sidebarItem("girls", "Girls", <Users className="w-4 h-4" />)}
+
+          <p className="px-5 py-2 mt-3 text-[10px] font-bold text-[#607080] uppercase tracking-widest">Data</p>
+          {sidebarItem("teams", "Teams", <UserCheck className="w-4 h-4" />)}
+          {sidebarItem("logs", "Activity Log", <ActivityIcon className="w-4 h-4" />)}
+          {sidebarItem("visits", "Visits", <Globe className="w-4 h-4" />)}
+        </nav>
       </div>
 
-      {/* ── Main ── */}
-      <div className="flex flex-col sm:flex-row flex-1 overflow-hidden">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-h-screen">
 
-        {/* ── Left panel ── */}
-        <div className="w-full sm:w-[340px] border-b-4 sm:border-b-0 sm:border-r-4 border-[#29adff] flex flex-col sm:h-[calc(100vh-100px)]">
+        {/* Top Bar */}
+        <header className="bg-white h-[50px] flex items-center justify-between px-5 shadow-sm flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-[#999] hover:text-[#333]">
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#bbb]" />
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="pl-8 pr-3 py-1.5 w-48 rounded bg-[#f5f5f5] border-none text-[12px] text-[#333] focus:outline-none focus:bg-[#eee]"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button onClick={load} className="text-[12px] text-[#999] hover:text-[#333]">
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+            <Bell className="w-4 h-4 text-[#bbb] hover:text-[#666] cursor-pointer" />
+            <Settings className="w-4 h-4 text-[#bbb] hover:text-[#666] cursor-pointer" />
+            <div className="w-8 h-8 rounded-full bg-[#1abc9c] flex items-center justify-center text-white text-xs font-bold">A</div>
+          </div>
+        </header>
 
-          {/* Tabs */}
-          <div className="flex gap-1 p-3 border-b-4 border-[#29adff]">
-            {([["users","#29adff"],["guys","#29adff"],["girls","#ff77a8"],["teams","#ff77a8"],["logs","#ffec27"],["visits","#00e436"]] as const).map(([t, c]) => (
-              <button key={t} onClick={() => { setTab(t); setTeamFilter(null); setVisitFilter(null); }}
-                className={`flex-1 py-2 text-[6px] border-2 ${tab === t ? `bg-[${c}] text-[#1d2b53]` : "text-[#c2c3c7]"}`}
-                style={{ borderColor: tab === t ? c : `${c}40`, background: tab === t ? c : "transparent" }}>
-                {t.toUpperCase()}
-              </button>
-            ))}
+        {/* Page Content */}
+        <div className="flex-1 p-5 overflow-y-auto">
+
+          {/* Page Title */}
+          <div className="flex items-center justify-between mb-5">
+            <h1 className="text-[22px] font-light text-[#333]">
+              {tab === "dashboard" ? "Dashboard" :
+               tab === "users" ? "All Users" :
+               tab === "guys" ? "Guys" :
+               tab === "girls" ? "Girls" :
+               tab === "teams" ? "Teams" :
+               tab === "logs" ? "Activity Log" : "Visits"}
+            </h1>
+            <span className="text-[12px] text-[#999]">bubl. admin / {tab}</span>
           </div>
 
-          {/* Search (users only) */}
-          {(tab === "users" || tab === "guys" || tab === "girls") && (
-            <div className="p-3 border-b-4 border-[#29adff]">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#29adff]" />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="SEARCH..."
-                  className="w-full pl-10 pr-4 py-2 border-4 border-[#29adff] bg-[#1d2b53] text-white text-[9px] placeholder-[#c2c3c7]/30 focus:outline-none focus:border-[#ffec27]"
-                  style={px} />
+          {loading ? (
+            <div className="bg-white rounded p-20 text-center text-[#999] text-sm">Loading...</div>
+          ) : tab === "dashboard" ? (
+            <>
+              {/* Stat Cards Row 1 */}
+              <div className="grid grid-cols-4 gap-4 mb-4">
+                {statCards.map(s => (
+                  <div key={s.label} className={`${s.bg} rounded p-4 text-white flex items-center justify-between`}>
+                    <div>
+                      <p className="text-[28px] font-bold leading-none">{s.value}</p>
+                      <p className="text-[12px] text-white/70 mt-1">{s.label}</p>
+                    </div>
+                    {s.icon}
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
 
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <p className="text-center text-[#c2c3c7] py-10 text-[9px]">LOADING...</p>
+              {/* Stat Cards Row 2 */}
+              <div className="grid grid-cols-4 gap-4 mb-5">
+                {statCards2.map(s => (
+                  <div key={s.label} className={`${s.bg} rounded p-4 text-white flex items-center justify-between`}>
+                    <div>
+                      <p className="text-[28px] font-bold leading-none">{s.value}</p>
+                      <p className="text-[12px] text-white/70 mt-1">{s.label}</p>
+                    </div>
+                    {s.icon}
+                  </div>
+                ))}
+              </div>
 
-            ) : (tab === "users" || tab === "guys" || tab === "girls") ? (
-              (() => {
-                let list = filteredUsers;
-                if (tab === "guys") list = list.filter(s => s.gender === "male");
-                if (tab === "girls") list = list.filter(s => s.gender === "female");
-                return list.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO {tab.toUpperCase()}</p> : (
-                list.map(s => (
-                  <button key={s.id} onClick={() => { setSelectedUser(s); setSelectedTeam(null); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b-2 border-[#1d2b53] ${selectedUser?.id === s.id ? "bg-[#1d2b53]" : "hover:bg-[#1d2b53]/60"}`}>
-                    <div className="w-9 h-9 border-2 border-[#ff77a8] bg-[#1d2b53] flex items-center justify-center shrink-0">
-                      <span className="text-[11px] text-[#ff77a8]">{s.name[0]?.toUpperCase()}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[8px] truncate">{s.name}</p>
-                      <p className="text-[#c2c3c7] text-[7px] truncate mt-0.5">{s.phone}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <Badge text={s.status.toUpperCase()} color={s.status === "matched" ? "#00e436" : "#ffec27"} />
-                      <span className="text-[#c2c3c7]/40 text-[6px]">{timeAgo(s.created_at)}</span>
-                    </div>
-                  </button>
-                ))
-              );
-              })()
+              {/* Charts Row */}
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                {/* Traffic - Last 7 Days */}
+                <div className="bg-white rounded shadow-sm">
+                  <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                    <h3 className="text-[14px] font-semibold text-[#333]">Site Traffic <span className="font-normal text-[#999]">— Last 7 Days</span></h3>
+                    <span className="text-[11px] text-[#999]">{analytics.weekVisits} visits</span>
+                  </div>
+                  <div className="p-4" style={{ height: 240 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={trafficByDay}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={{ stroke: "#eee" }} />
+                        <YAxis tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} width={30} />
+                        <Tooltip contentStyle={{ fontSize: 12, border: "1px solid #eee", borderRadius: 4, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }} />
+                        <Area type="monotone" dataKey="visits" stroke="#1abc9c" fill="#1abc9c" fillOpacity={0.15} strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
 
-            ) : tab === "teams" ? (
-              filteredTeams.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO TEAMS</p> : (
-                filteredTeams.map(t => (
-                  <button key={t.id} onClick={() => { setSelectedTeam(t); setSelectedUser(null); }}
-                    className={`w-full text-left px-4 py-3 border-b-2 border-[#1d2b53] ${selectedTeam?.id === t.id ? "bg-[#1d2b53]" : "hover:bg-[#1d2b53]/60"}`}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[#29adff] text-[9px]">{t.code}</span>
-                      <Badge text={t.status.toUpperCase()} color={t.status === "full" ? "#00e436" : "#ffec27"} />
+                {/* Signups - Guys vs Girls */}
+                <div className="bg-white rounded shadow-sm">
+                  <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                    <h3 className="text-[14px] font-semibold text-[#333]">Signups <span className="font-normal text-[#999]">— Guys vs Girls</span></h3>
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#3498db]" /> Guys</span>
+                      <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#e74c3c]" /> Girls</span>
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 ${t.player1_ready ? "bg-[#00e436]" : "bg-[#ffec27]"}`} />
-                        <span className="text-[7px]">{t.player1_name}</span>
+                  </div>
+                  <div className="p-4" style={{ height: 240 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={signupsByDay}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={{ stroke: "#eee" }} />
+                        <YAxis tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                        <Tooltip contentStyle={{ fontSize: 12, border: "1px solid #eee", borderRadius: 4, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }} />
+                        <Bar dataKey="guys" fill="#3498db" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="girls" fill="#e74c3c" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              {/* Today's Traffic - Hourly */}
+              <div className="bg-white rounded shadow-sm mb-5">
+                <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                  <h3 className="text-[14px] font-semibold text-[#333]">Today's Traffic <span className="font-normal text-[#999]">— Hourly</span></h3>
+                  <span className="text-[11px] text-[#999]">{analytics.todayVisits} visits today &middot; {analytics.activeLastHour} active last hour</span>
+                </div>
+                <div className="p-4" style={{ height: 200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trafficByHour}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={{ stroke: "#eee" }} />
+                      <YAxis tick={{ fontSize: 10, fill: "#999" }} tickLine={false} axisLine={false} width={30} allowDecimals={false} />
+                      <Tooltip contentStyle={{ fontSize: 12, border: "1px solid #eee", borderRadius: 4, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }} />
+                      <Area type="monotone" dataKey="visits" stroke="#3498db" fill="#3498db" fillOpacity={0.1} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Recent Activity + Recent Signups side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Recent Signups */}
+                <div className="bg-white rounded shadow-sm">
+                  <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                    <h3 className="text-[14px] font-semibold text-[#333]">Recent Signups</h3>
+                    <button onClick={() => setTab("users")} className="text-[11px] text-[#1abc9c] hover:underline">View All</button>
+                  </div>
+                  <div className="divide-y divide-[#f5f5f5]">
+                    {signups.slice(0, 8).map(s => (
+                      <div key={s.id} className="px-4 py-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${s.gender === "male" ? "bg-[#3498db]" : s.gender === "female" ? "bg-[#e74c3c]" : "bg-[#95a5a6]"}`}>
+                            {s.name[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-[13px] text-[#333] font-medium">{s.name}</p>
+                            <p className="text-[11px] text-[#999]">{s.phone}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-[10px] px-2 py-0.5 rounded ${s.status === "matched" ? "bg-[#2ecc71]/10 text-[#2ecc71]" : "bg-[#f39c12]/10 text-[#f39c12]"}`}>
+                            {s.status}
+                          </span>
+                          <p className="text-[10px] text-[#ccc] mt-0.5">{timeAgo(s.created_at)}</p>
+                        </div>
                       </div>
-                      {t.player2_name ? (
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 ${t.player2_ready ? "bg-[#00e436]" : "bg-[#ffec27]"}`} />
-                          <span className="text-[7px]">{t.player2_name}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recent Activity */}
+                <div className="bg-white rounded shadow-sm">
+                  <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                    <h3 className="text-[14px] font-semibold text-[#333]">Recent Activity</h3>
+                    <button onClick={() => setTab("logs")} className="text-[11px] text-[#1abc9c] hover:underline">View All</button>
+                  </div>
+                  <div className="divide-y divide-[#f5f5f5]">
+                    {activity.slice(0, 8).map(a => (
+                      <div key={a.id} className="px-4 py-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-[#1abc9c]" />
+                          <div>
+                            <p className="text-[13px] text-[#333]">
+                              <span className="font-medium">{a.actor_name || "Unknown"}</span>
+                              <span className="text-[#999] ml-1.5">{a.action.replace(/_/g, " ")}</span>
+                            </p>
+                            {a.details && <p className="text-[11px] text-[#bbb] truncate max-w-[280px]">{a.details}</p>}
+                          </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 bg-[#5f574f]" />
-                          <span className="text-[7px] text-[#5f574f]">WAITING</span>
-                        </div>
+                        <span className="text-[10px] text-[#ccc] shrink-0">{timeAgo(a.created_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+
+          ) : (tab === "users" || tab === "guys" || tab === "girls") ? (
+            <div className="bg-white rounded shadow-sm">
+              <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                <h3 className="text-[14px] font-semibold text-[#333]">
+                  {tab === "users" ? "All Users" : tab === "guys" ? "Guys" : "Girls"}
+                  <span className="text-[#999] font-normal ml-2">({displayUsers.length})</span>
+                </h3>
+              </div>
+              <table className="w-full">
+                <thead><tr>
+                  <th className={th}>Name</th>
+                  <th className={th}>Phone</th>
+                  <th className={th}>Gender</th>
+                  <th className={th}>Age</th>
+                  <th className={th}>Status</th>
+                  <th className={th}>Signed Up</th>
+                  <th className={th + " text-right"}>Actions</th>
+                </tr></thead>
+                <tbody>
+                  {slice(displayUsers).length === 0 ? (
+                    <tr><td colSpan={7} className="text-center py-12 text-[#bbb] text-sm">No users found</td></tr>
+                  ) : slice(displayUsers).map(s => (
+                    <>
+                      <tr key={s.id}
+                        onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                        className={`cursor-pointer ${expandedId === s.id ? "bg-[#f8fffe]" : "hover:bg-[#fafafa]"}`}>
+                        <td className={td}>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold ${s.gender === "male" ? "bg-[#3498db]" : s.gender === "female" ? "bg-[#e74c3c]" : "bg-[#95a5a6]"}`}>
+                              {s.name[0]?.toUpperCase()}
+                            </div>
+                            <span className="font-medium text-[#333]">{s.name}</span>
+                          </div>
+                        </td>
+                        <td className={td + " font-mono text-[12px] text-[#888]"}>{s.phone}</td>
+                        <td className={td}>
+                          <span className={`text-[12px] ${s.gender === "male" ? "text-[#3498db]" : s.gender === "female" ? "text-[#e74c3c]" : "text-[#bbb]"}`}>
+                            {s.gender || "—"}
+                          </span>
+                        </td>
+                        <td className={td + " text-[#888]"}>{s.age || "—"}</td>
+                        <td className={td}>
+                          <span className={`text-[11px] px-2 py-0.5 rounded ${
+                            s.status === "matched" ? "bg-[#2ecc71]/10 text-[#2ecc71]" : "bg-[#f39c12]/10 text-[#f39c12]"
+                          }`}>{s.status}</span>
+                        </td>
+                        <td className={td + " text-[12px] text-[#999]"}>{timeAgo(s.created_at)}</td>
+                        <td className={td + " text-right"}>
+                          <button onClick={e => { e.stopPropagation(); removeUser(s.id); }}
+                            className="text-[#ddd] hover:text-[#e74c3c] p-1">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedId === s.id && (
+                        <tr key={s.id + "-exp"} className="bg-[#f8fffe]">
+                          <td colSpan={7} className="px-4 py-3 border-b border-[#e0e0e0]">
+                            <div className="grid grid-cols-4 gap-x-8 gap-y-2 text-[12px]">
+                              <div><span className="text-[#999]">Looking for: </span><span className="text-[#555]">{s.looking_for || "—"}</span></div>
+                              <div><span className="text-[#999]">Hobbies: </span><span className="text-[#555]">{Array.isArray(s.hobbies) && s.hobbies.length ? s.hobbies.join(", ") : "—"}</span></div>
+                              <div><span className="text-[#999]">IP: </span><span className="text-[#555] font-mono">{s.signup_ip || "—"}</span></div>
+                              <div><span className="text-[#999]">Referrer: </span><span className="text-[#555]">{s.referrer || "—"}</span></div>
+                              <div className="col-span-2"><span className="text-[#999]">Device: </span><span className="text-[#aaa]">{s.user_agent || "—"}</span></div>
+                              <div className="col-span-2">
+                                <span className="text-[#999]">Team: </span>
+                                {(() => {
+                                  const team = teams.find(t => t.player1_phone === s.phone || t.player2_phone === s.phone);
+                                  if (!team) return <span className="text-[#ccc]">none</span>;
+                                  const mate = team.player1_phone === s.phone ? team.player2_name : team.player1_name;
+                                  return <span className="text-[#555]">{team.code} — teammate: {mate || "waiting"} ({team.status})</span>;
+                                })()}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </div>
-                    <p className="text-[#c2c3c7]/30 text-[6px] mt-1.5">{timeAgo(t.created_at)}</p>
-                  </button>
-                ))
-              )
+                    </>
+                  ))}
+                </tbody>
+              </table>
+              {totalPages > 1 && <Pagination page={page} totalPages={totalPages} listLen={listLen} setPage={setPage} />}
+            </div>
 
-            ) : tab === "logs" ? (
-              activity.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO LOGS</p> : (
-                activity.map(a => {
-                  const c = ACTION_COLORS[a.action] || "#5f574f";
-                  return (
-                    <div key={a.id} className="px-3 py-2.5 border-b-2 border-[#1d2b53] group relative">
-                      <button onClick={() => removeLog(a.id)} className="absolute top-2 right-2 text-[#ff004d]/0 group-hover:text-[#ff004d]/60 hover:!text-[#ff004d] text-[10px]">&times;</button>
-                      <div className="flex items-center justify-between mb-1">
-                        <Badge text={a.action.replace(/_/g, " ").toUpperCase()} color={c} />
-                        <span className="text-[#c2c3c7]/30 text-[5px]">{timeAgo(a.created_at)}</span>
-                      </div>
-                      {a.actor_name && <p className="text-[7px]">{a.actor_name}</p>}
-                      {a.actor_phone && <p className="text-[#c2c3c7] text-[6px]">{a.actor_phone}</p>}
-                      {a.details && <p className="text-[#c2c3c7]/50 text-[5px] mt-1 break-words leading-[1.8]">{a.details}</p>}
-                    </div>
-                  );
-                })
-              )
-
-            ) : tab === "visits" ? (
-              filteredVisits.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO VISITS</p> : (
-                filteredVisits.map(v => (
-                  <div key={v.id} className="px-3 py-2 border-b-2 border-[#1d2b53] group relative">
-                    <button onClick={() => removeVisit(v.id)} className="absolute top-1.5 right-2 text-[#ff004d]/0 group-hover:text-[#ff004d]/60 hover:!text-[#ff004d] text-[10px]">&times;</button>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[#00e436] text-[7px]">{v.path || "/"}</span>
-                      <span className="text-[#c2c3c7]/30 text-[5px]">{timeAgo(v.created_at)}</span>
-                    </div>
-                    {v.ip && <p className="text-[#ffec27] text-[6px]">IP: {v.ip}</p>}
-                    {v.referrer && <p className="text-[#c2c3c7] text-[5px] truncate">FROM: {v.referrer}</p>}
-                    {v.user_agent && <p className="text-[#c2c3c7]/30 text-[4px] truncate mt-0.5">{v.user_agent}</p>}
-                  </div>
-                ))
-              )
-
-            ) : null}
-          </div>
-        </div>
-
-        {/* ── Right detail panel ── */}
-        <div className="flex-1 flex items-start justify-center p-4 sm:p-8 overflow-y-auto">
-          {selectedUser ? (
-            <div className="max-w-md w-full">
-              <button onClick={() => setSelectedUser(null)} className="mb-3 text-[#c2c3c7] hover:text-white"><X className="w-5 h-5" /></button>
-              <div className="border-4 border-[#29adff] bg-[#1d2b53] p-5 space-y-4">
-                <div>
-                  <h2 className="text-[14px]">{selectedUser.name}</h2>
-                  <p className="text-[#c2c3c7] text-[8px] mt-1">{selectedUser.phone}</p>
+          ) : tab === "teams" ? (
+            <div className="bg-white rounded shadow-sm">
+              <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                <h3 className="text-[14px] font-semibold text-[#333]">
+                  Teams <span className="text-[#999] font-normal ml-2">({filteredTeams.length})</span>
+                </h3>
+                <div className="flex gap-1.5">
+                  {filterBtn("All", null, teamFilter, setTeamFilter)}
+                  {filterBtn("Full", "full", teamFilter, setTeamFilter)}
+                  {filterBtn("Waiting", "waiting", teamFilter, setTeamFilter)}
+                  {filterBtn("Ready", "ready", teamFilter, setTeamFilter)}
                 </div>
-                <div className="h-[3px] bg-[#29adff]/20" />
-                <Row label="STATUS"><Badge text={selectedUser.status.toUpperCase()} color={selectedUser.status === "matched" ? "#00e436" : "#ffec27"} /></Row>
-                <Row label="GENDER"><span className="text-[8px] text-[#fff1e8]/70">{selectedUser.gender || "---"}</span></Row>
-                <Row label="AGE"><span className="text-[8px] text-[#fff1e8]/70">{selectedUser.age || "---"}</span></Row>
-                <Row label="SCHOOL"><span className="text-[8px] text-[#fff1e8]/70">{selectedUser.school_id_url || "---"}</span></Row>
-                <Row label="LOOKING FOR"><span className="text-[8px] text-[#fff1e8]/70">{selectedUser.looking_for || "---"}</span></Row>
-                <Row label="HOBBIES">
-                  {Array.isArray(selectedUser.hobbies) && selectedUser.hobbies.length > 0
-                    ? <div className="flex flex-wrap gap-1.5">{selectedUser.hobbies.map(h => <Badge key={h} text={h} color="#ff77a8" />)}</div>
-                    : <span className="text-[8px] text-[#c2c3c7]">---</span>}
-                </Row>
-                <Row label="TEAM">
-                  {(() => {
-                    const team = teams.find(t => t.player1_phone === selectedUser.phone || t.player2_phone === selectedUser.phone);
-                    if (!team) return <span className="text-[8px] text-[#c2c3c7]">NO TEAM</span>;
-                    const isP1 = team.player1_phone === selectedUser.phone;
-                    return (
-                      <div className="space-y-1">
-                        <p className="text-[#29adff] text-[8px]">CODE: {team.code}</p>
-                        <p className="text-[7px] text-[#fff1e8]/70">TEAMMATE: {isP1 ? team.player2_name || "NONE" : team.player1_name}</p>
-                        <Badge text={team.status.toUpperCase()} color={team.status === "full" ? "#00e436" : "#ffec27"} />
-                      </div>
-                    );
-                  })()}
-                </Row>
-                <Row label="SIGNED UP"><span className="text-[7px] text-[#c2c3c7]">{new Date(selectedUser.created_at).toLocaleString()}</span></Row>
-                {selectedUser.signup_ip && <Row label="IP"><span className="text-[8px] text-[#ffec27]">{selectedUser.signup_ip}</span></Row>}
-                {selectedUser.user_agent && <Row label="DEVICE"><span className="text-[6px] text-[#c2c3c7] break-words leading-[1.8]">{selectedUser.user_agent}</span></Row>}
-                {selectedUser.referrer && <Row label="REFERRER"><span className="text-[7px] text-[#29adff] break-words">{selectedUser.referrer}</span></Row>}
-                <button onClick={() => removeUser(selectedUser.id)}
-                  className="w-full py-3 border-4 border-[#ff004d] bg-[#ff004d]/10 text-[#ff004d] text-[8px] hover:bg-[#ff004d]/25 mt-2">
-                  REMOVE
-                </button>
               </div>
+              <table className="w-full">
+                <thead><tr>
+                  <th className={th}>Code</th>
+                  <th className={th}>Player 1</th>
+                  <th className={th}>Player 2</th>
+                  <th className={th}>Status</th>
+                  <th className={th}>Ready</th>
+                  <th className={th}>Created</th>
+                  <th className={th + " text-right"}>Actions</th>
+                </tr></thead>
+                <tbody>
+                  {slice(filteredTeams).length === 0 ? (
+                    <tr><td colSpan={7} className="text-center py-12 text-[#bbb] text-sm">No teams</td></tr>
+                  ) : slice(filteredTeams).map(t => (
+                    <tr key={t.id} className="hover:bg-[#fafafa]">
+                      <td className={td + " font-mono font-semibold text-[#333]"}>{t.code}</td>
+                      <td className={td}>
+                        <span className="text-[#333]">{t.player1_name}</span>
+                        <span className="text-[11px] text-[#bbb] ml-1.5">{t.player1_phone}</span>
+                      </td>
+                      <td className={td}>
+                        {t.player2_name ? (
+                          <>
+                            <span className="text-[#333]">{t.player2_name}</span>
+                            <span className="text-[11px] text-[#bbb] ml-1.5">{t.player2_phone}</span>
+                          </>
+                        ) : <span className="text-[#ccc]">waiting...</span>}
+                      </td>
+                      <td className={td}>
+                        <span className={`text-[11px] px-2 py-0.5 rounded ${t.status === "full" ? "bg-[#2ecc71]/10 text-[#2ecc71]" : "bg-[#f39c12]/10 text-[#f39c12]"}`}>
+                          {t.status}
+                        </span>
+                      </td>
+                      <td className={td}>
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full mr-1.5 ${t.player1_ready ? "bg-[#2ecc71]" : "bg-[#ddd]"}`} />
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${t.player2_ready ? "bg-[#2ecc71]" : "bg-[#ddd]"}`} />
+                      </td>
+                      <td className={td + " text-[12px] text-[#999]"}>{timeAgo(t.created_at)}</td>
+                      <td className={td + " text-right"}>
+                        <button onClick={() => removeTeam(t.id)} className="text-[#ddd] hover:text-[#e74c3c] p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {totalPages > 1 && <Pagination page={page} totalPages={totalPages} listLen={listLen} setPage={setPage} />}
             </div>
 
-          ) : selectedTeam ? (
-            <div className="max-w-md w-full">
-              <button onClick={() => setSelectedTeam(null)} className="mb-3 text-[#c2c3c7] hover:text-white"><X className="w-5 h-5" /></button>
-              <div className="border-4 border-[#ff77a8] bg-[#1d2b53] p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[14px] text-[#ff77a8]">TEAM {selectedTeam.code}</h2>
-                  <Badge text={selectedTeam.status.toUpperCase()} color={selectedTeam.status === "full" ? "#00e436" : "#ffec27"} />
+          ) : tab === "logs" ? (
+            <div className="bg-white rounded shadow-sm">
+              <div className="px-4 py-3 border-b border-[#eee]">
+                <h3 className="text-[14px] font-semibold text-[#333]">
+                  Activity Log <span className="text-[#999] font-normal ml-2">({activity.length})</span>
+                </h3>
+              </div>
+              <table className="w-full">
+                <thead><tr>
+                  <th className={th}>Action</th>
+                  <th className={th}>User</th>
+                  <th className={th}>Details</th>
+                  <th className={th}>Time</th>
+                  <th className={th + " text-right"}></th>
+                </tr></thead>
+                <tbody>
+                  {slice(activity).length === 0 ? (
+                    <tr><td colSpan={5} className="text-center py-12 text-[#bbb] text-sm">No activity</td></tr>
+                  ) : slice(activity).map(a => (
+                    <tr key={a.id} className="hover:bg-[#fafafa]">
+                      <td className={td}>
+                        <span className="text-[11px] px-2 py-0.5 rounded bg-[#ecf0f1] text-[#7f8c8d]">
+                          {a.action.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td className={td}>
+                        {a.actor_name && <span className="font-medium text-[#333]">{a.actor_name}</span>}
+                        {a.actor_phone && <span className="text-[11px] text-[#bbb] ml-1.5">{a.actor_phone}</span>}
+                      </td>
+                      <td className={td + " text-[12px] text-[#999] max-w-xs truncate"}>{a.details || "—"}</td>
+                      <td className={td + " text-[12px] text-[#999]"}>{timeAgo(a.created_at)}</td>
+                      <td className={td + " text-right"}>
+                        <button onClick={() => removeLog(a.id)} className="text-[#ddd] hover:text-[#e74c3c] p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {totalPages > 1 && <Pagination page={page} totalPages={totalPages} listLen={listLen} setPage={setPage} />}
+            </div>
+
+          ) : tab === "visits" ? (
+            <div className="bg-white rounded shadow-sm">
+              <div className="px-4 py-3 border-b border-[#eee] flex items-center justify-between">
+                <h3 className="text-[14px] font-semibold text-[#333]">
+                  Visits <span className="text-[#999] font-normal ml-2">({filteredVisits.length})</span>
+                </h3>
+                <div className="flex gap-1.5">
+                  {filterBtn("All", null, visitFilter, setVisitFilter)}
+                  {filterBtn("1h", "active1h", visitFilter, setVisitFilter)}
+                  {filterBtn("Today", "today", visitFilter, setVisitFilter)}
+                  {filterBtn("Week", "week", visitFilter, setVisitFilter)}
                 </div>
-                <div className="h-[3px] bg-[#ff77a8]/20" />
-                <Row label="PLAYER 1">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-3 h-3 ${selectedTeam.player1_ready ? "bg-[#00e436]" : "bg-[#ffec27]"}`} />
-                      <span className="text-[9px]">{selectedTeam.player1_name}</span>
-                    </div>
-                    <p className="text-[#c2c3c7] text-[7px]">{selectedTeam.player1_phone}</p>
-                    <p className="text-[#c2c3c7] text-[6px]">{selectedTeam.player1_gender} · {selectedTeam.player1_ready ? "READY" : "NOT READY"}</p>
-                  </div>
-                </Row>
-                <Row label="PLAYER 2">
-                  {selectedTeam.player2_name ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-3 h-3 ${selectedTeam.player2_ready ? "bg-[#00e436]" : "bg-[#ffec27]"}`} />
-                        <span className="text-[9px]">{selectedTeam.player2_name}</span>
-                      </div>
-                      <p className="text-[#c2c3c7] text-[7px]">{selectedTeam.player2_phone}</p>
-                      <p className="text-[#c2c3c7] text-[6px]">{selectedTeam.player2_gender} · {selectedTeam.player2_ready ? "READY" : "NOT READY"}</p>
-                    </div>
-                  ) : <span className="text-[8px] text-[#5f574f]">WAITING FOR INVITE</span>}
-                </Row>
-                <Row label="CREATED"><span className="text-[7px] text-[#c2c3c7]">{new Date(selectedTeam.created_at).toLocaleString()}</span></Row>
-                <button onClick={() => removeTeam(selectedTeam.id)}
-                  className="w-full py-3 border-4 border-[#ff004d] bg-[#ff004d]/10 text-[#ff004d] text-[8px] hover:bg-[#ff004d]/25 mt-2">
-                  REMOVE TEAM
-                </button>
               </div>
+              <table className="w-full">
+                <thead><tr>
+                  <th className={th}>Path</th>
+                  <th className={th}>IP</th>
+                  <th className={th}>Referrer</th>
+                  <th className={th}>Device</th>
+                  <th className={th}>Time</th>
+                  <th className={th + " text-right"}></th>
+                </tr></thead>
+                <tbody>
+                  {slice(filteredVisits).length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-12 text-[#bbb] text-sm">No visits</td></tr>
+                  ) : slice(filteredVisits).map(v => (
+                    <tr key={v.id} className="hover:bg-[#fafafa]">
+                      <td className={td + " font-medium text-[#333]"}>{v.path || "/"}</td>
+                      <td className={td + " font-mono text-[12px] text-[#888]"}>{v.ip || "—"}</td>
+                      <td className={td + " text-[12px] text-[#999] max-w-[180px] truncate"}>{v.referrer || "—"}</td>
+                      <td className={td + " text-[11px] text-[#bbb] max-w-[200px] truncate"}>{v.user_agent || "—"}</td>
+                      <td className={td + " text-[12px] text-[#999]"}>{timeAgo(v.created_at)}</td>
+                      <td className={td + " text-right"}>
+                        <button onClick={() => removeVisit(v.id)} className="text-[#ddd] hover:text-[#e74c3c] p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {totalPages > 1 && <Pagination page={page} totalPages={totalPages} listLen={listLen} setPage={setPage} />}
             </div>
-
-          ) : (
-            <div className="text-center mt-20">
-              <p className="text-[#c2c3c7]/30 text-[8px]">SELECT A USER OR TEAM</p>
-              <p className="text-[#c2c3c7]/30 text-[8px] mt-2">TO VIEW DETAILS</p>
-            </div>
-          )}
+          ) : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Pagination({ page, totalPages, listLen, setPage }: { page: number; totalPages: number; listLen: number; setPage: (p: number | ((p: number) => number)) => void }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-[#eee] text-[12px] text-[#999]">
+      <span>{listLen} total &middot; page {page} of {totalPages}</span>
+      <div className="flex items-center gap-0.5">
+        <button onClick={() => setPage((p: number) => Math.max(1, p - 1))} disabled={page <= 1}
+          className="px-2 py-1 rounded hover:bg-[#ecf0f1] disabled:text-[#ddd]">
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+          let n: number;
+          if (totalPages <= 7) n = i + 1;
+          else if (page <= 4) n = i + 1;
+          else if (page >= totalPages - 3) n = totalPages - 6 + i;
+          else n = page - 3 + i;
+          return (
+            <button key={n} onClick={() => setPage(n)}
+              className={`w-7 h-7 rounded text-[11px] ${page === n ? "bg-[#1abc9c] text-white" : "text-[#888] hover:bg-[#ecf0f1]"}`}>
+              {n}
+            </button>
+          );
+        })}
+        <button onClick={() => setPage((p: number) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+          className="px-2 py-1 rounded hover:bg-[#ecf0f1] disabled:text-[#ddd]">
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

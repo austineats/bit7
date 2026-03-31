@@ -101,7 +101,7 @@ function getLLM(): OpenAI {
 
 function getModel(): string {
   if (process.env.OPENAI_API_KEY) return "gpt-4o-mini";
-  return "gemini-flash-lite-latest";
+  return "gpt-4o-mini";
 }
 
 // ─── Helpers ───

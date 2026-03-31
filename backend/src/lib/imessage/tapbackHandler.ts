@@ -74,7 +74,7 @@ async function handleConfirm(
   // Use LLM to understand what to confirm based on the original message
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 150,
     temperature: 0.3,
     messages: [
@@ -122,7 +122,7 @@ async function handleUrgent(
   // Extract actionable item and create a high-priority reminder
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 100,
     temperature: 0,
     messages: [
@@ -166,7 +166,7 @@ async function handleElaborate(
 
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 300,
     temperature: 0.7,
     messages: [
@@ -191,7 +191,7 @@ async function handleReject(
 ): Promise<string> {
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 200,
     temperature: 0.8,
     messages: [

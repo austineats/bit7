@@ -131,6 +131,120 @@ export async function handleBlindDateReply(
 }
 
 // ---------------------------------------------------------------------------
+// Redirect Handler — intercepts messages from signed-up users who haven't
+// finished onboarding (no team or not ready). Like Ditto, always acknowledge
+// what they said but steer them back to completing signup.
+// ---------------------------------------------------------------------------
+
+export async function handleBlindDateRedirect(
+  userPhone: string,
+  text: string,
+): Promise<boolean> {
+  // Check if user has a signup
+  const signup = await prisma.blindDateSignup.findUnique({
+    where: { phone: userPhone },
+  });
+
+  if (!signup) return false; // not signed up at all — let normal agent handle
+
+  // If they're already matched or revealed, don't redirect
+  if (signup.status === "matched") return false;
+
+  // Check if they have a full team with both players ready
+  const team = await prisma.blindDateTeam.findFirst({
+    where: {
+      OR: [{ player1_phone: userPhone }, { player2_phone: userPhone }],
+    },
+  });
+
+  const hasFullTeam = team && team.status === "full";
+  const isReady = team && (
+    (team.player1_phone === userPhone && team.player1_ready) ||
+    (team.player2_phone === userPhone && team.player2_ready)
+  );
+
+  // If they have a full team and are ready, they're just waiting for a match — don't redirect
+  if (hasFullTeam && isReady) return false;
+
+  // They need to do something — generate a witty redirect
+  const baseUrl = process.env.BASE_URL || "https://ara-malarial-poisedly.ngrok-free.dev";
+  const firstName = signup.name.split(" ")[0].toLowerCase();
+  const trimmed = text.trim();
+
+  // Determine what they need to do
+  let action: string;
+  let link: string;
+  if (!team) {
+    action = "create or join a team";
+    link = `${baseUrl}/signup`;
+  } else if (team.status === "waiting") {
+    action = "get your teammate to join";
+    link = `${baseUrl}/invite/${team.code}`;
+  } else if (!isReady) {
+    action = "mark yourself as ready";
+    link = `${baseUrl}/signup`;
+  } else {
+    action = "finish setting up";
+    link = `${baseUrl}/signup`;
+  }
+
+  try {
+    const client = getRawLLMClient();
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 150,
+      temperature: 0.9,
+      messages: [
+        {
+          role: "system",
+          content: `You are bubl's AI matchmaker for college blind dates. You talk in all lowercase, casual texting style. You're witty, funny, and a little sassy.
+
+The user "${firstName}" texted you but they haven't finished setting up for miit (the blind date event). They need to: ${action}.
+
+Your job:
+1. Briefly acknowledge what they said in a funny/witty way (1 sentence max)
+2. Redirect them back to finishing their setup
+
+Rules:
+- All lowercase, no periods at end of sentences
+- Be playful and teasing, like a friend roasting them
+- Always tie their message back to the blind date
+- Never actually help with their request — always redirect
+- Keep it to 2-3 short sentences max
+- Don't use the word "onboarding"
+- Reference their actual message content`,
+        },
+        {
+          role: "user",
+          content: trimmed || "hi",
+        },
+      ],
+    });
+
+    let reply = response.choices[0]?.message?.content?.trim() || "";
+
+    // Append the link on a new line
+    if (reply) {
+      reply += `\n\nfinish setting up here: ${link}`;
+    } else {
+      reply = `hey ${firstName} you still gotta ${action} before i can help with anything else\n\nlock in real quick: ${link}`;
+    }
+
+    await sendIMessage(userPhone, reply);
+    console.log(`[BlindDate] Redirect sent to ${userPhone}: needs to ${action}`);
+  } catch (e) {
+    // Fallback if LLM fails
+    console.warn("[BlindDate] Redirect LLM failed, using fallback:", e);
+    await sendIMessage(
+      userPhone,
+      `hey ${firstName} you gotta ${action} first before we can chat\n\nlock in here: ${link}`,
+    );
+  }
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Reveal — sends both parties each other's info + icebreaker
 // ---------------------------------------------------------------------------
 
@@ -169,7 +283,7 @@ async function sendIcebreaker(phoneA: string, phoneB: string): Promise<void> {
   try {
     const client = getRawLLMClient();
     const response = await client.chat.completions.create({
-      model: "gemini-flash-lite-latest",
+      model: "gpt-4o-mini",
       max_tokens: 100,
       temperature: 1.0,
       messages: [

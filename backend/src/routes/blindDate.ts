@@ -280,7 +280,7 @@ blindDateRouter.get("/admin/signups", async (_req, res) => {
     partyMap[ps.phone!] = {
       party: ps.party,
       slot: ps,
-      teammate: sameRoleSlots.find(s => s.filled) || null,
+      teammate: (sameRoleSlots.find(s => s.filled) as typeof partySlots[0] | undefined) || null,
     };
   }
 

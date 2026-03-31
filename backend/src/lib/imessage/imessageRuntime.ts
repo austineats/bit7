@@ -131,9 +131,13 @@ async function handleIMessage(agentId: string, msg: IMessage): Promise<void> {
   markRead(userPhone).catch(() => {});
 
   // Check if user is in an active blind date match — intercept before normal flow
-  const { handleBlindDateReply } = await import("./blindDateEngine.js");
+  const { handleBlindDateReply, handleBlindDateRedirect } = await import("./blindDateEngine.js");
   const blindDateHandled = await handleBlindDateReply(userPhone, body);
   if (blindDateHandled) return;
+
+  // Check if user signed up but hasn't finished setup — redirect like Ditto
+  const blindDateRedirected = await handleBlindDateRedirect(userPhone, body);
+  if (blindDateRedirected) return;
 
   // Load agent
   const agent = await prisma.agent.findUnique({ where: { id: agentId } });
@@ -151,18 +155,17 @@ async function handleIMessage(agentId: string, msg: IMessage): Promise<void> {
     getOrCreateUserState(agentId, userPhone),
   ]);
 
-  // Handle first-time user — send welcome + contact card
+  // Handle first-time user — send contact card only (no old welcome message)
+  // The blind date redirect above already handles signup users.
+  // For non-signup users texting for the first time, just send contact card.
   if (userState.conversation_count === 0) {
     await incrementConversationCount(agentId, userPhone);
-    await saveMessage(agentId, userPhone, "agent", spec.welcome_message);
-    await sendIMessage(userPhone, spec.welcome_message);
-    // Send contact card so they can save us
     try {
       await sendContactCard(userPhone);
     } catch (e) {
       console.warn("[iMessage] Failed to send contact card:", e);
     }
-    if (!body.trim()) return;
+    // Don't send generic welcome — let the normal LLM flow handle the reply
   }
 
   // Detect location shares — Apple Maps URLs contain GPS coordinates
@@ -208,7 +211,7 @@ async function handleIMessage(agentId: string, msg: IMessage): Promise<void> {
     try {
       const llm = getRawLLMClient();
       const extraction = await llm.chat.completions.create({
-        model: "gemini-flash-lite-latest",
+        model: "gpt-4o-mini",
         max_tokens: 100,
         temperature: 0,
         messages: [
@@ -431,7 +434,7 @@ async function handleIMessage(agentId: string, msg: IMessage): Promise<void> {
   const allRelevantTools = selectRelevantTools(body);
   // Filter tools based on active workspace
   const relevantTools = filterToolsForWorkspace(allRelevantTools, workspace);
-  const llmModel = "gemini-flash-lite-latest";
+  const llmModel = "gpt-4o-mini";
   console.log(`[iMessage] Context: ${messages.length} msgs, ${relevantTools.length} tools, model=${llmModel}, workspace=${workspace.id}`);
 
   const maxRounds = relevantTools.some(t => t.function.name === "browser") ? 10 : 5;
@@ -452,7 +455,7 @@ async function handleIMessage(agentId: string, msg: IMessage): Promise<void> {
       if (/^functions\b|tool_call|web_search.*query|^\s*\{.*"query"/i.test(rawReply.trim()) && round === 0) {
         console.warn(`[iMessage] Detected garbage tool output, retrying without tools`);
         const retryCompletion = await llm.chat.completions.create({
-          model: "gemini-flash-lite-latest",
+          model: "gpt-4o-mini",
           max_tokens: 400,
           temperature: 0.7,
           messages: toolMessages,

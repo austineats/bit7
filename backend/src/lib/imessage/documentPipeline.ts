@@ -113,7 +113,7 @@ else:
 export async function summarizeDocument(text: string, userHint?: string): Promise<string> {
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 400,
     temperature: 0.3,
     messages: [
@@ -183,7 +183,7 @@ export async function generateAndSendDocument(params: GenerateDocumentParams): P
   // Step 1: Generate document content via LLM
   const llm = getRawLLMClient();
   const completion = await llm.chat.completions.create({
-    model: "gemini-flash-lite-latest",
+    model: "gpt-4o-mini",
     max_tokens: 1500,
     temperature: 0.5,
     messages: [

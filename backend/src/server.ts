@@ -67,9 +67,9 @@ app.listen(port, "0.0.0.0", async () => {
   console.log(`Bubl API running on http://localhost:${port}`);
 
   try {
-    const { startBublAgent } = await import("./bublAgent.js");
-    await startBublAgent();
+    const { startIMessageRuntime } = await import("./lib/imessage/imessageRuntime.js");
+    await startIMessageRuntime();
   } catch (e) {
-    console.warn("[Bubl] Failed to start agent:", e instanceof Error ? e.message : e);
+    console.warn("[Bubl] Failed to start iMessage runtime:", e instanceof Error ? e.message : e);
   }
 });

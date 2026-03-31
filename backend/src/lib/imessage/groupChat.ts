@@ -203,7 +203,7 @@ async function summarizeThread(chatId: string): Promise<string> {
 
     const llm = getRawLLMClient();
     const completion = await llm.chat.completions.create({
-      model: "gemini-flash-lite-latest",
+      model: "gpt-4o-mini",
       max_tokens: 200,
       temperature: 0.3,
       messages: [
@@ -287,7 +287,7 @@ async function handleGroupMessage(event: GroupMessageEvent): Promise<void> {
   if (!reply && event.mentionsAgent) {
     const llm = getRawLLMClient();
     const completion = await llm.chat.completions.create({
-      model: "gemini-flash-lite-latest",
+      model: "gpt-4o-mini",
       max_tokens: 200,
       temperature: 0.7,
       messages: [
