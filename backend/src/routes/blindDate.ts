@@ -139,9 +139,8 @@ blindDateRouter.post("/signup", upload.none(), async (req, res) => {
         console.log(`[BlindDate] ${name} joined team ${inviteCode}`);
         logActivity("team_joined", name.trim(), normalized, `Joined team ${inviteCode} (with ${team.player1_name})`);
 
-        // Notify player 1 that their friend joined
-        sendIMessage(team.player1_phone, friendJoinedReply(name.trim()))
-          .catch(e => console.warn("[BlindDate] Failed to notify player 1:", e));
+        // Don't send unsolicited iMessage — would get screened if they haven't texted bubl yet
+        // The lobby page polls and updates automatically
       }
     } else {
       // Create a new team (player 1)
@@ -500,7 +499,7 @@ blindDateRouter.get("/team/:code", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 // In-memory OTP store (replace with Redis in production)
-const otpStore = new Map<string, { code: string; expires: number }>();
+export const otpStore = new Map<string, { code: string; expires: number }>();
 
 blindDateRouter.post("/send-otp", async (req, res) => {
   try {

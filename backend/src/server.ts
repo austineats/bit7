@@ -63,7 +63,7 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
-app.listen(port, async () => {
+app.listen(port, "0.0.0.0", async () => {
   console.log(`Bubl API running on http://localhost:${port}`);
 
   try {

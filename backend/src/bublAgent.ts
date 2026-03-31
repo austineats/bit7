@@ -306,23 +306,28 @@ async function processMessages(sender: string) {
   const team = user ? await lookupTeam(sender) : null;
   const firstName = user?.name?.split(" ")[0] || null;
 
-  // Check for ready-up trigger
+  // Check for sign-in request — generate and send OTP in the reply
   const lower = combinedText.toLowerCase();
-  if (user && (lower.includes("signed up") || lower.includes("ive signed up") || lower.includes("i've signed up") || lower.includes("i signed up"))) {
-    const updatedTeam = await markReady(sender);
-    logActivity("ready_up", firstName || undefined, normalizePhone(sender), `Team: ${team?.code || "none"}`);
+  if (user && (lower.includes("sign in") || lower.includes("signin") || lower.includes("log in") || lower.includes("login"))) {
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const normalized = normalizePhone(sender);
+    // Store OTP in memory (same store as the HTTP endpoint)
+    const { otpStore } = await import("./routes/blindDate.js");
+    otpStore.set(normalized, { code, expires: Date.now() + 5 * 60 * 1000 });
 
-    // Notify teammate that this person readied up
-    if (updatedTeam) {
-      const normalized = normalizePhone(sender);
-      const isP1 = updatedTeam.player1_phone === normalized;
-      const teammatePhone = isP1 ? updatedTeam.player2_phone : updatedTeam.player1_phone;
-      if (teammatePhone) {
-        const { IMessageSDK } = await import("@photon-ai/imessage-kit");
-        const notifySdk = new IMessageSDK();
-        notifySdk.send(teammatePhone, `${firstName} just readied up, you're both locked in`).catch(() => {});
-      }
-    }
+    // Reply with code directly — user initiated so it delivers
+    await sdk.message(lastMsg).ifFromOthers().replyText(`your sign in code is: ${code}`).execute();
+    console.log(`[bubl] → ${sender}: OTP code sent`);
+    logActivity("otp_sent", firstName || undefined, normalized, "OTP via iMessage (user-initiated)");
+    await stopTyping(sender);
+    return; // Don't run LLM for sign-in requests
+  }
+
+  // Check for ready-up trigger
+  if (user && (lower.includes("signed up") || lower.includes("ive signed up") || lower.includes("i've signed up") || lower.includes("i signed up"))) {
+    await markReady(sender);
+    logActivity("ready_up", firstName || undefined, normalizePhone(sender), `Team: ${team?.code || "none"}`);
+    // Don't notify teammate here — they might not have texted bubl yet (would get screened)
   }
 
   // Generate LLM reply

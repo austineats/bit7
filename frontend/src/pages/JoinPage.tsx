@@ -105,7 +105,13 @@ export function JoinPage() {
         <nav className="border-b-4 border-[#29adff] bg-[#1d2b53]/95">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
             <button onClick={() => navigate("/")} className="text-[#ff004d] text-[14px] sm:text-[18px]">bubl.</button>
-            <span className="text-[#ffec27] text-[7px] sm:text-[9px]">&lt; JOIN TEAM &gt;</span>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <button onClick={() => navigate("/signin")} className="text-[#c2c3c7] text-[7px] sm:text-[9px] hover:text-[#ffec27] transition-none">
+                &gt;&gt; [ SIGN IN ]
+              </button>
+              <span className="text-[#5f574f] text-[7px] sm:text-[9px]">|</span>
+              <span className="text-[#ffec27] text-[7px] sm:text-[9px]">&lt; JOIN &gt;</span>
+            </div>
           </div>
         </nav>
 
