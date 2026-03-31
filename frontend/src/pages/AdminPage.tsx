@@ -99,7 +99,7 @@ export function AdminPage() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [analytics, setAnalytics] = useState({ totalVisits: 0, todayVisits: 0, weekVisits: 0, activeLastHour: 0 });
 
-  const [tab, setTab] = useState<"users" | "teams" | "logs" | "visits">("users");
+  const [tab, setTab] = useState<"users" | "guys" | "girls" | "teams" | "logs" | "visits">("users");
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [visitFilter, setVisitFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -184,6 +184,9 @@ export function AdminPage() {
   const waitingTeams = teams.filter(t => t.status === "waiting");
   const readyTeams = teams.filter(t => t.player1_ready && t.player2_ready);
 
+  const guys = signups.filter(s => s.gender === "male");
+  const girls = signups.filter(s => s.gender === "female");
+
   const filteredUsers = signups.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) || s.phone.includes(search)
   );
@@ -203,6 +206,8 @@ export function AdminPage() {
   function onStat(filter: string) {
     if (["active1h", "today", "week", "alltime"].includes(filter)) { setTab("visits"); setVisitFilter(filter === "alltime" ? null : filter); setTeamFilter(null); }
     else if (filter === "signups") { setTab("users"); setTeamFilter(null); setVisitFilter(null); }
+    else if (filter === "guys") { setTab("guys"); setTeamFilter(null); setVisitFilter(null); }
+    else if (filter === "girls") { setTab("girls"); setTeamFilter(null); setVisitFilter(null); }
     else if (["teams", "full", "ready", "waiting"].includes(filter)) { setTab("teams"); setTeamFilter(filter === "teams" ? null : filter); setVisitFilter(null); }
   }
 
@@ -225,6 +230,8 @@ export function AdminPage() {
             { v: analytics.weekVisits, l: "THIS WEEK", c: "#ff77a8", f: "week" },
             { v: analytics.totalVisits, l: "ALL TIME", c: "#c2c3c7", f: "alltime" },
             { v: signups.length, l: "SIGNUPS", c: "#ffec27", f: "signups" },
+            { v: guys.length, l: "GUYS", c: "#29adff", f: "guys" },
+            { v: girls.length, l: "GIRLS", c: "#ff77a8", f: "girls" },
             { v: teams.length, l: "TEAMS", c: "#29adff", f: "teams" },
             { v: fullTeams.length, l: "FULL", c: "#00e436", f: "full" },
             { v: readyTeams.length, l: "READY", c: "#ff77a8", f: "ready" },
@@ -248,7 +255,7 @@ export function AdminPage() {
 
           {/* Tabs */}
           <div className="flex gap-1 p-3 border-b-4 border-[#29adff]">
-            {([["users","#29adff"],["teams","#ff77a8"],["logs","#ffec27"],["visits","#00e436"]] as const).map(([t, c]) => (
+            {([["users","#29adff"],["guys","#29adff"],["girls","#ff77a8"],["teams","#ff77a8"],["logs","#ffec27"],["visits","#00e436"]] as const).map(([t, c]) => (
               <button key={t} onClick={() => { setTab(t); setTeamFilter(null); setVisitFilter(null); }}
                 className={`flex-1 py-2 text-[6px] border-2 ${tab === t ? `bg-[${c}] text-[#1d2b53]` : "text-[#c2c3c7]"}`}
                 style={{ borderColor: tab === t ? c : `${c}40`, background: tab === t ? c : "transparent" }}>
@@ -258,7 +265,7 @@ export function AdminPage() {
           </div>
 
           {/* Search (users only) */}
-          {tab === "users" && (
+          {(tab === "users" || tab === "guys" || tab === "girls") && (
             <div className="p-3 border-b-4 border-[#29adff]">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-[#29adff]" />
@@ -274,9 +281,13 @@ export function AdminPage() {
             {loading ? (
               <p className="text-center text-[#c2c3c7] py-10 text-[9px]">LOADING...</p>
 
-            ) : tab === "users" ? (
-              filteredUsers.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO USERS</p> : (
-                filteredUsers.map(s => (
+            ) : (tab === "users" || tab === "guys" || tab === "girls") ? (
+              (() => {
+                let list = filteredUsers;
+                if (tab === "guys") list = list.filter(s => s.gender === "male");
+                if (tab === "girls") list = list.filter(s => s.gender === "female");
+                return list.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO {tab.toUpperCase()}</p> : (
+                list.map(s => (
                   <button key={s.id} onClick={() => { setSelectedUser(s); setSelectedTeam(null); }}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left border-b-2 border-[#1d2b53] ${selectedUser?.id === s.id ? "bg-[#1d2b53]" : "hover:bg-[#1d2b53]/60"}`}>
                     <div className="w-9 h-9 border-2 border-[#ff77a8] bg-[#1d2b53] flex items-center justify-center shrink-0">
@@ -292,7 +303,8 @@ export function AdminPage() {
                     </div>
                   </button>
                 ))
-              )
+              );
+              })()
 
             ) : tab === "teams" ? (
               filteredTeams.length === 0 ? <p className="text-center text-[#c2c3c7] py-10 text-[8px]">NO TEAMS</p> : (

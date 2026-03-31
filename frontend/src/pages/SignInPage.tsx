@@ -7,8 +7,20 @@ type Step = "phone" | "texted" | "code" | "done";
 
 export function SignInPage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [step, setStep] = useState<Step>(() => {
+    const saved = sessionStorage.getItem("bubl-signin");
+    return saved ? JSON.parse(saved).step || "phone" : "phone";
+  });
+  const [phone, setPhone] = useState(() => {
+    const saved = sessionStorage.getItem("bubl-signin");
+    return saved ? JSON.parse(saved).phone || "" : "";
+  });
+
+  // Persist step + phone so returning from iMessage lands on code screen
+  const goToStep = (s: Step, p?: string) => {
+    setStep(s);
+    sessionStorage.setItem("bubl-signin", JSON.stringify({ step: s, phone: p || phone }));
+  };
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,10 +40,10 @@ export function SignInPage() {
     try {
       // Check if user exists
       const res = await fetch(`/api/blind-date/status/${digits}`);
-      const data = await res.json();
+      await res.json();
       if (!res.ok) { setError("no account found with this number"); setLoading(false); return; }
       // User exists — tell them to text bubl
-      setStep("texted");
+      goToStep("texted");
     } catch {
       setError("connection failed");
     } finally {
@@ -56,7 +68,7 @@ export function SignInPage() {
         navigate(`/invite/${data.user.teamCode}`);
         return;
       }
-      setStep("done");
+      goToStep("done"); sessionStorage.removeItem("bubl-signin");
     } catch {
       setError("connection failed");
     } finally {
@@ -125,15 +137,11 @@ export function SignInPage() {
                 <p className="text-[#29adff] text-[8px] sm:text-[10px] text-center mb-6">{phone}</p>
 
                 <a href="sms:textbubl@icloud.com&body=sign in"
+                  onClick={() => goToStep("code")}
                   className="inline-block w-full py-3 sm:py-4 min-h-[44px] text-[10px] sm:text-[12px] text-center active:translate-x-[2px] active:translate-y-[2px]"
                   style={{ border: "4px solid #00e436", background: "#00e436", color: "#1d2b53", boxShadow: "4px 4px 0 #008751" }}>
                   &gt; TEXT BUBL
                 </a>
-
-                <button onClick={() => setStep("code")}
-                  className="w-full py-3 min-h-[44px] text-[8px] sm:text-[9px] text-[#29adff] mt-4">
-                  i texted bubl, enter code &gt;&gt;
-                </button>
 
                 <p className="text-[#5f574f] text-[6px] sm:text-[7px] text-center mt-4"
                   style={{ animation: "blink-pixel 1.5s step-end infinite" }}>
@@ -161,9 +169,9 @@ export function SignInPage() {
                     style={{ border: "4px solid #00e436", background: "#00e436", color: "#1d2b53", boxShadow: "4px 4px 0 #008751" }}>
                     {loading ? "VERIFYING..." : "> VERIFY"}
                   </button>
-                  <button onClick={() => setStep("texted")}
+                  <button onClick={() => goToStep("texted")}
                     className="w-full py-3 min-h-[44px] text-[8px] sm:text-[9px] text-[#29adff]">
-                    didn't get a code? text bubl again
+                    resend code
                   </button>
                 </div>
               </div>
